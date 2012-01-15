@@ -36,6 +36,17 @@ drivers = ['nova.virt.firewall.IptablesFirewallDriver',
            'nova.virt.xenapi.firewall.Dom0IptablesFirewallDriver', ]
 
 
+class NoopFirewallDriver(object):
+    def __init__(*args, **kwargs):
+        pass
+
+    def noop(*args, **kwargs):
+        pass
+
+    def __getattr__(self, key):
+        return self.noop
+
+
 class Dom0IptablesFirewallDriver(IptablesFirewallDriver):
     """ Dom0IptablesFirewallDriver class
 
