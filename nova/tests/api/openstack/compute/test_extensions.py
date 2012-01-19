@@ -179,6 +179,7 @@ class ExtensionControllerTest(ExtensionTestCase):
             "Rescue",
             "SchedulerHints",
             "SecurityGroups",
+            "ServerBandwidth",
             "ServerDiagnostics",
             "ServerStartStop",
             "SimpleTenantUsage",
