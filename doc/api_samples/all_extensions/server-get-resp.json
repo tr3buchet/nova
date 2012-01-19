@@ -55,6 +55,7 @@
         },
         "name": "new-server-test",
         "progress": 0,
+        "rax-bandwidth:bandwidth": [],
         "security_groups": [
             {
                 "name": "default"

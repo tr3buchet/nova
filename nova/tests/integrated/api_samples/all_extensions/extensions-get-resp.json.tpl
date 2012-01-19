@@ -335,6 +335,14 @@
             "name": "Volumes",
             "namespace": "http://docs.openstack.org/compute/ext/volumes/api/v1.1",
             "updated": "%(timestamp)s"
+        },
+        {
+            "alias": "rax-bandwidth",
+            "description": "%(text)s",
+            "links": [],
+            "name": "ServerBandwidth",
+            "namespace": "http://docs.rackspace.com/servers/api/ext/server_bandwidth/",
+            "updated": "%(timestamp)s"
         }
     ]
 }

@@ -19,4 +19,5 @@
   <security_groups>
     <security_group name="default"/>
   </security_groups>
+  <rax-bandwidth:bandwidth/>
 </server>
