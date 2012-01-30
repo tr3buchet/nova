@@ -126,6 +126,9 @@
   <extension alias="os-volumes" updated="%(timestamp)s" namespace="http://docs.openstack.org/compute/ext/volumes/api/v1.1" name="Volumes">
     <description>%(text)s</description>
   </extension>
+  <extension alias="rax-backup-schedule" updated="%(timestamp)s" namespace="http://docs.openstack.org/ext/backup-schedule/api/v1.1" name="Backup_schedule">
+    <description>%(text)s</description>
+  </extension>
   <extension alias="rax-bandwidth" updated="%(timestamp)s" namespace="http://docs.rackspace.com/servers/api/ext/server_bandwidth/" name="ServerBandwidth">
     <description>%(text)s</description>
   </extension>
