@@ -129,4 +129,7 @@
   <extension alias="rax-bandwidth" updated="%(timestamp)s" namespace="http://docs.rackspace.com/servers/api/ext/server_bandwidth/" name="ServerBandwidth">
     <description>%(text)s</description>
   </extension>
+  <extension alias="services" updated="%(timestamp)s" namespace="http://docs.openstack.org/ext/services/api/v1.1" name="Services">
+    <description>%(text)s</description>
+  </extension>
 </extensions>
