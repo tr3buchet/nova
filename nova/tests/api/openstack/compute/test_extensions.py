@@ -180,6 +180,7 @@ class ExtensionControllerTest(ExtensionTestCase):
             "ServerBandwidth",
             "ServerDiagnostics",
             "ServerStartStop",
+            "Services",
             "SimpleTenantUsage",
             "Users",
             "VSAs",
