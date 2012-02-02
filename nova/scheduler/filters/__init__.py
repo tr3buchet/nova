@@ -40,4 +40,5 @@ from nova.scheduler.filters.isolated_hosts_filter import IsolatedHostsFilter
 from nova.scheduler.filters.compute_filter import ComputeFilter
 from nova.scheduler.filters.core_filter import CoreFilter
 from nova.scheduler.filters.json_filter import JsonFilter
+from nova.scheduler.filters.rackspace_filter import RackspaceFilter
 from nova.scheduler.filters.ram_filter import RamFilter
