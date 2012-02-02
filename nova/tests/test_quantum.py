@@ -74,6 +74,7 @@ class FakeQuantumClientConnection(object):
 
     def create_and_attach_port(self, tenant_id, net_id, interface_id,
                                **kwargs):
+        print "create and attach", tenant_id, net_id
         if not self.network_exists(tenant_id, net_id):
             raise Exception(
                 _("network %(net_id)s does not exist for tenant %(tenant_id)"

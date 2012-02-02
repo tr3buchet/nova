@@ -159,7 +159,7 @@ def fake_network(network_id, ipv6=None):
         ipv6 = FLAGS.use_ipv6
     fake_network = {'id': network_id,
              'uuid': '00000000-0000-0000-0000-00000000000000%02d' % network_id,
-             'label': 'test%d' % network_id,
+             'label': 'test%d' % (network_id - 1),
              'injected': False,
              'multi_host': False,
              'cidr': '192.168.%d.0/24' % network_id,
@@ -187,7 +187,7 @@ def fake_network(network_id, ipv6=None):
 
 
 def vifs(n):
-    for x in xrange(n):
+    for x in xrange(1, n + 1):
         yield {'id': x,
                'address': 'DE:AD:BE:EF:00:%02x' % x,
                'uuid': '00000000-0000-0000-0000-00000000000000%02d' % x,
@@ -196,12 +196,12 @@ def vifs(n):
 
 
 def floating_ip_ids():
-    for i in xrange(99):
+    for i in xrange(1, 100):
         yield i
 
 
 def fixed_ip_ids():
-    for i in xrange(99):
+    for i in xrange(1, 100):
         yield i
 
 
@@ -215,8 +215,8 @@ def next_fixed_ip(network_id, num_floating_ips=0):
              for i in xrange(num_floating_ips)]
     return {'id': next_id,
             'network_id': network_id,
-            'address': '192.168.%d.1%02d' % (network_id, next_id),
-            'instance_id': 0,
+            'address': '192.168.%d.%03d' % (network_id, (next_id + 99)),
+            'instance_id': 1,
             'allocated': False,
             # and since network_id and vif_id happen to be equivalent
             'virtual_interface_id': network_id,
@@ -226,7 +226,7 @@ def next_fixed_ip(network_id, num_floating_ips=0):
 def next_floating_ip(fixed_ip_id):
     next_id = floating_ip_id.next()
     return {'id': next_id,
-            'address': '10.10.10.1%02d' % next_id,
+            'address': '10.10.10.%03d' % (next_id + 99),
             'fixed_ip_id': fixed_ip_id,
             'project_id': None,
             'auto_assigned': False}
@@ -259,7 +259,7 @@ def fake_get_instance_nw_info(stubs, num_networks=1, ips_per_vif=2,
     fixed_ip_id = fixed_ip_ids()
     fixed_ips = []
 
-    networks = [fake_network(x) for x in xrange(num_networks)]
+    networks = [fake_network(x) for x in xrange(1, num_networks + 1)]
 
     def fixed_ips_fake(*args, **kwargs):
         global fixed_ips

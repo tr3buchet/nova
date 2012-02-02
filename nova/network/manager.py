@@ -864,10 +864,12 @@ class NetworkManager(manager.SchedulerDependentManager):
         networks = self._get_networks_for_instance(admin_context,
                                         instance_id, project_id,
                                         requested_networks=requested_networks)
+        LOG.warn(networks)
         self._allocate_mac_addresses(context, instance_id, networks)
-        self._allocate_fixed_ips(admin_context, instance_id,
-                                 host, networks, vpn=vpn,
+        self._allocate_fixed_ips(admin_context, instance_id, host,
+                                 networks, vpn=vpn,
                                  requested_networks=requested_networks)
+
         return self.get_instance_nw_info(context, instance_id, instance_uuid,
                                          rxtx_factor, host)
 
@@ -896,7 +898,7 @@ class NetworkManager(manager.SchedulerDependentManager):
 
     @wrap_check_policy
     def get_instance_nw_info(self, context, instance_id, instance_uuid,
-                             rxtx_factor, host):
+                             rxtx_factor, host, project_id=None):
         """Creates network info list for instance.
 
         called by allocate_for_instance and network_api
@@ -924,6 +926,7 @@ class NetworkManager(manager.SchedulerDependentManager):
                                  rxtx_factor, instance_host):
         """Builds a NetworkInfo object containing all network information
         for an instance"""
+        project_id = context.project_id
         nw_info = network_model.NetworkInfo()
         for vif in vifs:
             vif_dict = {'id': vif['uuid'],
@@ -1132,9 +1135,10 @@ class NetworkManager(manager.SchedulerDependentManager):
                                                           network['id'],
                                                           instance_id)
             self._do_trigger_security_group_members_refresh_for_instance(
-                                                                   instance_id)
+                                                               instance_id)
             get_vif = self.db.virtual_interface_get_by_instance_and_network
             vif = get_vif(context, instance_id, network['id'])
+
             values = {'allocated': True,
                       'virtual_interface_id': vif['id']}
             self.db.fixed_ip_update(context, address, values)

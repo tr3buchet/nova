@@ -296,6 +296,15 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
             net_proj_pairs = self.ipam.get_project_and_global_net_ids(context,
                                                                 project_id)
 
+        # Quantum may also know about networks that aren't in the networks
+        # table so we need to query Quanutm for any tenant networks and add
+        # them to net_proj_pairs.
+        qnets = self.q_conn.get_networks(project_id)
+        for qn in qnets['networks']:
+            pair = (qn['id'], project_id)
+            if pair not in net_proj_pairs:
+                net_proj_pairs.append(pair)
+
         # Create a port via quantum and attach the vif
         for (quantum_net_id, net_tenant_id) in net_proj_pairs:
             net_tenant_id = net_tenant_id or FLAGS.quantum_default_tenant_id
@@ -336,7 +345,8 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
             #                  network ID and it is not nullable
             vif_rec = self.add_virtual_interface(context,
                                                  instance_id,
-                                                 network_ref['id'])
+                                                 network_ref['id'],
+                                                 project_id)
 
             # talk to Quantum API to create and attach port.
             instance = db.instance_get(context, instance_id)
@@ -366,7 +376,7 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
                     vif_rec, net_tenant_id)
         return self.get_instance_nw_info(context, instance_id,
                                          instance['uuid'],
-                                         rxtx_factor, host)
+                                         rxtx_factor, host, project_id)
 
     @utils.synchronized('quantum-enable-dhcp')
     def enable_dhcp(self, context, quantum_net_id, network_ref, vif_rec,
@@ -426,17 +436,19 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
             self.driver.update_dhcp_hostfile_with_text(dev, hosts)
             self.driver.restart_dhcp(context, dev, network_ref)
 
-    def add_virtual_interface(self, context, instance_id, network_id):
+    def add_virtual_interface(self, context, instance_id, network_id,
+                              net_tenant_id):
         # If we're not using melange, use the default means...
         if FLAGS.use_melange_mac_generation:
             return self._add_virtual_interface(context, instance_id,
-                                               network_id)
+                                               network_id, net_tenant_id)
 
         return super(QuantumManager, self).add_virtual_interface(context,
                                                                  instance_id,
                                                                  network_id)
 
-    def _add_virtual_interface(self, context, instance_id, network_id):
+    def _add_virtual_interface(self, context, instance_id, network_id,
+                               net_tenant_id):
         vif = {'instance_id': instance_id,
                'network_id': network_id,
                'uuid': str(utils.gen_uuid())}
@@ -448,12 +460,12 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
         m_ipam = melange_ipam_lib.get_ipam_lib(self)
         vif['address'] = m_ipam.create_vif(vif['uuid'],
                                            vif['instance_id'],
-                                           context.project_id)
+                                           net_tenant_id)
 
         return self.db.virtual_interface_create(context, vif)
 
     def get_instance_nw_info(self, context, instance_id, instance_uuid,
-                                            rxtx_factor, host):
+                             rxtx_factor, host, project_id):
         """This method is used by compute to fetch all network data
            that should be used when creating the VM.
 
@@ -466,8 +478,6 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
            Ideally this 'interface' will be more formally defined
            in the future.
         """
-        admin_context = context.elevated()
-        project_id = context.project_id
         vifs = db.virtual_interface_get_by_instance(context, instance_id)
 
         net_tenant_dict = dict((net_id, tenant_id)
@@ -477,7 +487,8 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
         networks = {}
         for vif in vifs:
             if vif.get('network_id') is not None:
-                network = db.network_get(admin_context, vif['network_id'])
+                network = db.network_get(context.elevated(),
+                                         vif['network_id'])
                 net_tenant_id = net_tenant_dict[network['uuid']]
                 if net_tenant_id is None:
                     net_tenant_id = FLAGS.quantum_default_tenant_id
@@ -508,30 +519,27 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
         admin_context = context.elevated()
         vifs = db.virtual_interface_get_by_instance(admin_context,
                                                     instance_id)
+        msg_header = "instance|%(instance_id)s| " % locals()
         for vif_ref in vifs:
-            interface_id = vif_ref['uuid']
-            q_tenant_id = project_id
-
+            vif_uuid = vif_ref['uuid']
             network_ref = db.network_get(admin_context, vif_ref['network_id'])
+            q_tenant_id = network_ref['project_id']
             net_id = network_ref['uuid']
+
+            msg = _(msg_header + 'remove vif ' + vif_uuid)
+            LOG.debug(msg)
 
             # port deallocate block
             try:
-                port_id = None
                 port_id = self.q_conn.get_port_by_attachment(q_tenant_id,
-                                                    net_id, interface_id)
-                if not port_id:
-                    q_tenant_id = FLAGS.quantum_default_tenant_id
-                    port_id = self.q_conn.get_port_by_attachment(
-                        q_tenant_id, net_id, interface_id)
+                                                    net_id, vif_uuid)
 
-                if not port_id:
-                    LOG.error("Unable to find port with attachment: %s" %
-                              (interface_id))
-                else:
-                    self.q_conn.detach_and_delete_port(q_tenant_id,
+                LOG.debug(_(msg_header + 'detach and delete port ' +
+                            str(port_id)))
+
+                self.q_conn.detach_and_delete_port(q_tenant_id,
                                                        net_id, port_id)
-            except:
+            except Exception, e:
                 # except anything so the rest of deallocate can succeed
                 msg = _('port deallocation failed for instance: '
                         '|%(instance_id)s|, port_id: |%(port_id)s|')
@@ -541,9 +549,12 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
             try:
                 ipam_tenant_id = self.ipam.get_tenant_id_by_net_id(context,
                     net_id, vif_ref['uuid'], project_id)
-
+                LOG.debug(_(msg_header + 'deallocate ips on ipam tenant ' +
+                            str(ipam_tenant_id)))
                 self.ipam.deallocate_ips_by_vif(context, ipam_tenant_id,
                                                 net_id, vif_ref)
+                LOG.debug(_(msg_header + 'deleting vif ' +
+                            str(vif_ref['id'])))
                 db.virtual_interface_delete(admin_context, vif_ref['id'])
 
                 # If DHCP is enabled on this network then we need to update the
@@ -551,7 +562,7 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
                 if FLAGS.quantum_use_dhcp:
                     self.update_dhcp(context, ipam_tenant_id, network_ref,
                                      vif_ref, project_id)
-            except:
+            except Exception, e:
                 # except anything so the rest of deallocate can succeed
                 vif_uuid = vif_ref['uuid']
                 msg = _('ipam deallocation failed for instance: '
