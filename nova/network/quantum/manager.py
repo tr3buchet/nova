@@ -500,30 +500,27 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
         admin_context = context.elevated()
         vifs = db.virtual_interface_get_by_instance(admin_context,
                                                     instance_id)
+        msg_header = "instance|%(instance_id)s| " % locals()
         for vif_ref in vifs:
-            interface_id = vif_ref['uuid']
-            q_tenant_id = project_id
-
+            vif_uuid = vif_ref['uuid']
             network_ref = db.network_get(admin_context, vif_ref['network_id'])
+            q_tenant_id = network_ref['project_id']
             net_id = network_ref['uuid']
+
+            msg = _(msg_header + 'remove vif ' + vif_uuid)
+            LOG.debug(msg)
 
             # port deallocate block
             try:
-                port_id = None
                 port_id = self.q_conn.get_port_by_attachment(q_tenant_id,
-                                                    net_id, interface_id)
-                if not port_id:
-                    q_tenant_id = FLAGS.quantum_default_tenant_id
-                    port_id = self.q_conn.get_port_by_attachment(
-                        q_tenant_id, net_id, interface_id)
+                                                    net_id, vif_uuid)
 
-                if not port_id:
-                    LOG.error("Unable to find port with attachment: %s" %
-                              (interface_id))
-                else:
-                    self.q_conn.detach_and_delete_port(q_tenant_id,
+                LOG.debug(_(msg_header + 'detach and delete port ' +
+                            str(port_id)))
+
+                self.q_conn.detach_and_delete_port(q_tenant_id,
                                                        net_id, port_id)
-            except:
+            except Exception, e:
                 # except anything so the rest of deallocate can succeed
                 msg = _('port deallocation failed for instance: '
                         '|%(instance_id)s|, port_id: |%(port_id)s|')
@@ -533,7 +530,8 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
             try:
                 ipam_tenant_id = self.ipam.get_tenant_id_by_net_id(context,
                     net_id, vif_ref['uuid'], project_id)
-
+                LOG.debug(_(msg_header + 'deallocate ips on ipam tenant ' +
+                            str(ipam_tenant_id)))
                 self.ipam.deallocate_ips_by_vif(context, ipam_tenant_id,
                                                 net_id, vif_ref)
 
@@ -543,7 +541,7 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
                 if FLAGS.quantum_use_dhcp:
                     self.update_dhcp(context, ipam_tenant_id, network_ref,
                                      vif_ref, project_id)
-            except:
+            except Exception, e:
                 # except anything so the rest of deallocate can succeed
                 vif_uuid = vif_ref['uuid']
                 msg = _('ipam deallocation failed for instance: '
