@@ -140,7 +140,8 @@ def _download_tarball(request, staging_path):
 
 
 def _download_tarball_with_retry(sr_path, image_id, glance_host,
-                                 glance_port, auth_token, num_retries):
+                                 glance_port, auth_token, project_id,
+                                 num_retries):
     """Download the tarball image from Glance and extract it into the staging
     area. Retry if there is any failure.
     """
@@ -148,6 +149,11 @@ def _download_tarball_with_retry(sr_path, image_id, glance_host,
     headers = {}
     if auth_token:
         headers['x-auth-token'] = auth_token
+
+    # NOTE(markwash): the tenant id is only required because server-side calls
+    #                 to rackspace auth require it
+    if project_id:
+        headers['x-tenant-id'] = project_id
 
     url = "http://%(glance_host)s:%(glance_port)d/v1/images/"\
           "%(image_id)s" % locals()
@@ -331,7 +337,7 @@ def _prepare_staging_area_for_upload(sr_path, staging_path, vdi_uuids):
 
 
 def _upload_tarball(staging_path, image_id, glance_host, glance_port,
-                    auth_token, properties):
+                    auth_token, project_id, properties):
     """
     Create a tarball of the image and then stream that into Glance
     using chunked-transfer-encoded HTTP.
@@ -369,6 +375,11 @@ def _upload_tarball(staging_path, image_id, glance_host, glance_port,
     for key, value in properties.iteritems():
         header_key = "x-image-meta-property-%s" % key.replace('_', '-')
         headers[header_key] = str(value)
+
+    # NOTE(markwash): the tenant id is only required because server-side calls
+    #                 to rackspace auth require it
+    if project_id:
+        headers['x-tenant-id'] = project_id
 
     for header, value in headers.iteritems():
         conn.putheader(header, value)
@@ -491,13 +502,15 @@ def download_vhd(session, args):
     uuid_stack = params["uuid_stack"]
     sr_path = params["sr_path"]
     auth_token = params["auth_token"]
+    project_id = params.get("project_id")
     num_retries = params["num_retries"]
 
     staging_path = None
     try:
         staging_path = _download_tarball_with_retry(sr_path, image_id,
                                                     glance_host, glance_port,
-                                                    auth_token, num_retries)
+                                                    auth_token, project_id,
+                                                    num_retries)
         # Right now, it's easier to return a single string via XenAPI,
         # so we'll json encode the list of VHDs.
         return json.dumps(_import_vhds(sr_path, staging_path, uuid_stack))
@@ -516,13 +529,14 @@ def upload_vhd(session, args):
     glance_port = params["glance_port"]
     sr_path = params["sr_path"]
     auth_token = params["auth_token"]
+    project_id = params.get("project_id")
     properties = params["properties"]
 
     staging_path = _make_staging_area(sr_path)
     try:
         _prepare_staging_area_for_upload(sr_path, staging_path, vdi_uuids)
         _upload_tarball(staging_path, image_id, glance_host, glance_port,
-                        auth_token, properties)
+                        auth_token, project_id, properties)
     finally:
         _cleanup_staging_area(staging_path)
 

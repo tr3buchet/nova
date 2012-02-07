@@ -419,6 +419,7 @@ class VMHelper(HelperBase):
                   'glance_port': glance_port,
                   'sr_path': cls.get_sr_path(session),
                   'auth_token': getattr(context, 'auth_token', None),
+                  'project_id': context.project_id,
                   'properties': properties}
 
         kwargs = {'params': pickle.dumps(params)}
@@ -710,7 +711,8 @@ class VMHelper(HelperBase):
                   'uuid_stack': uuid_stack,
                   'sr_path': cls.get_sr_path(session),
                   'num_retries': FLAGS.glance_num_retries,
-                  'auth_token': getattr(context, 'auth_token', None)}
+                  'auth_token': getattr(context, 'auth_token', None),
+                  'project_id': context.project_id}
 
         kwargs = {'params': pickle.dumps(params)}
         task = session.async_call_plugin('glance', 'download_vhd', kwargs)
