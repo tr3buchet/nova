@@ -464,6 +464,7 @@ def upload_image(context, session, instance, vdi_uuids, image_id):
               'glance_port': glance_port,
               'sr_path': get_sr_path(session),
               'auth_token': getattr(context, 'auth_token', None),
+              'project_id': context.project_id,
               'properties': properties}
 
     kwargs = {'params': pickle.dumps(params)}
@@ -752,6 +753,7 @@ def _retry_glance_download_vhd(context, session, image_id):
                   'glance_port': glance_port,
                   'uuid_stack': uuid_stack,
                   'sr_path': get_sr_path(session),
+                  'project_id': context.project_id,
                   'auth_token': getattr(context, 'auth_token', None)}
         kwargs = {'params': pickle.dumps(params)}
 

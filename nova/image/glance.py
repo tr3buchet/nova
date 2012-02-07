@@ -68,7 +68,7 @@ def _create_glance_client(context, host, port):
                  'username': context.user_id,
                  'tenant': context.project_id}
         glance_client = GlanceClient(host, port, auth_tok=context.auth_token,
-                                     creds=creds)
+                                     tenant=context.project_id, creds=creds)
     else:
         glance_client = GlanceClient(host, port)
     return glance_client
