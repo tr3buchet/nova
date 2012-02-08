@@ -1,0 +1,5 @@
+/var/log/nova/nova-scheduler.log {
+    daily
+    copytruncate
+    missingok
+}

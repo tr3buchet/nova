@@ -1,0 +1,5 @@
+/var/log/nova/nova-vncproxy.log {
+    daily
+    copytruncate
+    missingok
+}
