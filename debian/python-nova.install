@@ -1,0 +1,4 @@
+usr/lib/python*/dist-packages/*
+usr/share/locale
+fullgitlog-nova.gz usr/share/rackspace-openstack/git
+lastcommit-nova.txt usr/share/rackspace-openstack/git

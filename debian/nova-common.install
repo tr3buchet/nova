@@ -1,0 +1,14 @@
+usr/bin/nova-manage
+debian/nova_sudoers etc/sudoers.d
+debian/nova.conf    etc/nova
+etc/nova/policy.json
+usr/bin/nova-logspool
+usr/bin/nova-rootwrap
+usr/bin/nova-all
+usr/bin/nova-spoolsentry
+usr/bin/nova-cert
+usr/bin/nova-debug
+usr/bin/stack
+usr/bin/nova-vsa
+usr/bin/clear_rabbit_queues
+usr/bin/nova-consoleauth

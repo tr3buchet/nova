@@ -1,0 +1,8 @@
+usr/bin/nova-api
+etc/nova/api-paste.ini
+usr/bin/instance-usage-audit
+usr/bin/nova-api-os-volume
+usr/bin/nova-api-ec2
+usr/bin/nova-direct-api
+usr/bin/nova-api-metadata
+usr/bin/nova-api-os-compute
