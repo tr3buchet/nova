@@ -1,0 +1,148 @@
+Source: nova
+Section: net
+Priority: extra
+Maintainer: Major Hayden <major.hayden@rackspace.com>
+Build-Depends: debhelper (>= 7.0.50),
+ python-m2crypto,
+ python-crypto,
+ python-all
+Build-Depends-Indep: python-support,
+ python-setuptools,
+ python-sphinx (>> 1.0),
+ python-distutils-extra,
+ python-gflags,
+ python-mox,
+ openssl,
+ python-carrot,
+ python-kombu,
+ python-boto,
+ python-amqplib,
+ python-ipy,
+ openssh-client,
+ python-sqlalchemy-ext (>= 0.7.2) | python-sqlalchemy (>= 0.7.2),
+ python-eventlet,
+ python-routes,
+ python-webob,
+ python-cheetah,
+ python-nose,
+ python-paste,
+ python-pastedeploy (>= 1.5.0),
+ python-tempita,
+ python-migrate,
+ python-netaddr,
+ python-glance,
+ python-paramiko,
+ python-novaclient,
+ python-lockfile,
+ python-simplejson,
+ python-lxml,
+ python-feedparser,
+ python-iso8601,
+ pep8
+Build-Conflicts: python-cjson
+Standards-Version: 3.9.1
+
+
+Package: python-nova
+Architecture: all
+Section: python
+Depends: ${python:Depends},
+ python-ipy,
+ python-boto,
+ python-m2crypto,
+ python-crypto,
+ python-pycurl,
+ python-daemon,
+ python-carrot,
+ python-kombu,
+ python-lockfile,
+ python-gflags,
+ openssl,
+ python-libxml2,
+ python-ldap,
+ python-sqlalchemy-ext (>= 0.7.2) | python-sqlalchemy (>= 0.7.2),
+ python-eventlet,
+ python-routes,
+ python-webob,
+ python-cheetah,
+ python-netaddr,
+ python-paste,
+ python-pastedeploy,
+ python-tempita,
+ python-migrate,
+ python-netaddr,
+ python-glance,
+ python-novaclient,
+ python-simplejson,
+ python-lxml,
+ python-feedparser,
+ python-mox,
+ python-iso8601,
+ sudo,
+ ${misc:Depends}
+Suggests: python-suds (>= 0.4.0),
+Conflicts: python-cjson
+Recommends: python-mysqldb
+Provides: ${python:Provides}
+Description: OpenStack Compute Python libraries
+
+Package: nova-common
+Architecture: all
+Depends: python-amqplib, python-nova (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
+Provides: ${python:Provides}
+Description: OpenStack Compute - common files
+
+Package: nova-compute
+Architecture: all
+Depends: nova-common (= ${binary:Version}), kpartx, curl, parted,
+ ebtables, gawk, iptables, dosfstools, ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - compute node
+
+Package: nova-cells
+Architecture: all
+Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - compute cell support
+
+Package: nova-scheduler
+Architecture: all
+Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - virtual machine scheduler
+
+Package: nova-volume
+Architecture: all
+Depends: nova-common (= ${binary:Version}), lvm2, iscsitarget, ${python:Depends}, ${misc:Depends}
+Suggests: sheepdog
+Description: OpenStack Compute - storage
+
+Package: nova-vncproxy
+Architecture: all
+Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - VNC proxy
+
+Package: nova-api
+Architecture: all
+Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - API frontend
+
+Package: nova-network
+Architecture: all
+Depends: socat, nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Suggests: radvd
+Description: OpenStack Compute - Network manager
+
+Package: nova-objectstore
+Architecture: all
+Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - object store
+
+Package: nova-console
+Architecture: all
+Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - Console
+
+Package: nova-doc
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}
+Recommends: libjs-jquery
+Description: OpenStack Compute - documetation

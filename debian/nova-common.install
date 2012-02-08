@@ -1,0 +1,11 @@
+usr/bin/nova-manage
+debian/nova_sudoers etc/sudoers.d
+debian/nova.conf    etc/nova
+etc/nova/policy.json
+usr/bin/nova-rootwrap
+usr/bin/nova-all
+usr/bin/nova-cert
+usr/bin/nova-clear-rabbit-queues
+usr/bin/nova-consoleauth
+usr/bin/nova-rpc-zmq-receiver
+tools  /usr/share/nova/

@@ -1,0 +1,6 @@
+nova (0.0.1-placeholder) unstable; urgency=low
+
+  * Initial package creation. Subsequent package builds will append additional
+    changelog entries.
+
+ -- ohthree jenkins <jenkins@nova-jenkins-ci>  Mon, 05 Dec 2011 14:43:25 -0600

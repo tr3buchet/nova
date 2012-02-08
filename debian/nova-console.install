@@ -1,0 +1,3 @@
+usr/bin/nova-console
+usr/bin/nova-xvpvncproxy
+usr/bin/nova-novncproxy

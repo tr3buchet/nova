@@ -1,0 +1,5 @@
+/var/log/nova/nova-consoleauth.log /var/log/nova/nova-xvpvncproxy.log {
+    daily
+    copytruncate
+    missingok
+}

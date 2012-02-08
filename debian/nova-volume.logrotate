@@ -1,0 +1,5 @@
+/var/log/nova/nova-volume.log {
+    daily
+    copytruncate
+    missingok
+}
