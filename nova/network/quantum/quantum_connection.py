@@ -145,8 +145,8 @@ class QuantumClientConnection(object):
                 # Skip ports without an attachment
                 if "id" not in port["attachment"]:
                     continue
-                rv.append({'port-id': port_id, 'attachment':
-                       port["attachment"]["id"]})
+                rv.append({'port-id': port_id,
+                           'attachment': port["attachment"]["id"]})
             except quantum_client.QuantumNotFoundException:
                 pass
         return rv

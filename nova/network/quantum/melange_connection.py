@@ -42,8 +42,6 @@ FLAGS = flags.FLAGS
 FLAGS.register_opts(melange_opts)
 LOG = logging.getLogger(__name__)
 
-LOG = logging.getLogger('treyisatard.network.quantum.melange_connection')
-
 json_content_type = {'Content-type': "application/json"}
 
 

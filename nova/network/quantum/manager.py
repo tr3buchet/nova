@@ -296,15 +296,6 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
             net_proj_pairs = self.ipam.get_project_and_global_net_ids(context,
                                                                 project_id)
 
-        # Quantum may also know about networks that aren't in the networks
-        # table so we need to query Quanutm for any tenant networks and add
-        # them to net_proj_pairs.
-        qnets = self.q_conn.get_networks(project_id)
-        for qn in qnets['networks']:
-            pair = (qn['id'], project_id)
-            if pair not in net_proj_pairs:
-                net_proj_pairs.append(pair)
-
         # Create a port via quantum and attach the vif
         for (quantum_net_id, net_tenant_id) in net_proj_pairs:
             net_tenant_id = net_tenant_id or FLAGS.quantum_default_tenant_id
@@ -376,7 +367,8 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
                     vif_rec, net_tenant_id)
         return self.get_instance_nw_info(context, instance_id,
                                          instance['uuid'],
-                                         rxtx_factor, host, project_id)
+                                         rxtx_factor, host,
+                                         project_id=project_id)
 
     @utils.synchronized('quantum-enable-dhcp')
     def enable_dhcp(self, context, quantum_net_id, network_ref, vif_rec,
@@ -465,7 +457,7 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
         return self.db.virtual_interface_create(context, vif)
 
     def get_instance_nw_info(self, context, instance_id, instance_uuid,
-                             rxtx_factor, host, project_id):
+                                            rxtx_factor, host, **kwargs):
         """This method is used by compute to fetch all network data
            that should be used when creating the VM.
 
@@ -478,6 +470,7 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
            Ideally this 'interface' will be more formally defined
            in the future.
         """
+        project_id = kwargs['project_id']
         vifs = db.virtual_interface_get_by_instance(context, instance_id)
 
         net_tenant_dict = dict((net_id, tenant_id)
@@ -487,8 +480,7 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
         networks = {}
         for vif in vifs:
             if vif.get('network_id') is not None:
-                network = db.network_get(context.elevated(),
-                                         vif['network_id'])
+                network = db.network_get(context.elevated(), vif['network_id'])
                 net_tenant_id = net_tenant_dict[network['uuid']]
                 if net_tenant_id is None:
                     net_tenant_id = FLAGS.quantum_default_tenant_id

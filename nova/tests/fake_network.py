@@ -159,7 +159,7 @@ def fake_network(network_id, ipv6=None):
         ipv6 = FLAGS.use_ipv6
     fake_network = {'id': network_id,
              'uuid': '00000000-0000-0000-0000-00000000000000%02d' % network_id,
-             'label': 'test%d' % (network_id - 1),
+             'label': 'test%d' % network_id,
              'injected': False,
              'multi_host': False,
              'cidr': '192.168.%d.0/24' % network_id,
@@ -264,7 +264,8 @@ def fake_get_instance_nw_info(stubs, num_networks=1, ips_per_vif=2,
     def fixed_ips_fake(*args, **kwargs):
         global fixed_ips
         ips = [next_fixed_ip(i, floating_ips_per_fixed_ip)
-               for i in xrange(num_networks) for j in xrange(ips_per_vif)]
+               for i in xrange(1, num_networks + 1)
+               for j in xrange(ips_per_vif)]
         fixed_ips = ips
         return ips
 
@@ -273,6 +274,10 @@ def fake_get_instance_nw_info(stubs, num_networks=1, ips_per_vif=2,
             if address == ip['address']:
                 return ip['floating_ips']
         return []
+
+    def fixed_ips_v6_fake():
+        return ['2001:db8:0:%x::1' % i
+                for i in xrange(1, num_networks + 1)]
 
     def virtual_interfaces_fake(*args, **kwargs):
         return [vif for vif in vifs(num_networks)]
@@ -296,14 +301,15 @@ def fake_get_instance_nw_info(stubs, num_networks=1, ips_per_vif=2,
 
     def get_subnets_by_net_id(self, context, project_id, network_uuid,
                               vif_uuid):
+        i = int(network_uuid[-2:])
         subnet_v4 = dict(
-            cidr='192.168.0.0/24',
-            dns1='1.2.3.4',
-            dns2='2.3.4.5',
-            gateway='192.168.0.1')
+            cidr='192.168.%d.0/24' % i,
+            dns1='192.168.%d.3' % i,
+            dns2='192.168.%d.4' % i,
+            gateway='192.168.%d.1' % i)
 
         subnet_v6 = dict(
-            cidr='fe80::/64',
+            cidr='2001:db8:0:%x::/64' % i,
             gateway='fe80::def')
         return [subnet_v4, subnet_v6]
 
@@ -317,6 +323,9 @@ def fake_get_instance_nw_info(stubs, num_networks=1, ips_per_vif=2,
         ips = fixed_ips_fake(*args, **kwargs)
         return [ip['address'] for ip in ips]
 
+    def get_v6_fake(*args, **kwargs):
+        return fixed_ips_v6_fake()
+
     stubs.Set(db, 'fixed_ip_get_by_instance', fixed_ips_fake)
     stubs.Set(db, 'floating_ip_get_by_fixed_address', floating_ips_fake)
     stubs.Set(db, 'virtual_interface_get_by_uuid', vif_by_uuid_fake)
@@ -329,6 +338,8 @@ def fake_get_instance_nw_info(stubs, num_networks=1, ips_per_vif=2,
               get_subnets_by_net_id)
     stubs.Set(nova_ipam_lib.QuantumNovaIPAMLib, 'get_v4_ips_by_interface',
                     get_v4_fake)
+    stubs.Set(nova_ipam_lib.QuantumNovaIPAMLib, 'get_v6_ips_by_interface',
+                    get_v6_fake)
 
     class FakeContext(nova.context.RequestContext):
         def is_admin(self):
