@@ -504,7 +504,8 @@ class QuantumManager(manager.FloatingIP, manager.FlatManager):
         for vif_ref in vifs:
             vif_uuid = vif_ref['uuid']
             network_ref = db.network_get(admin_context, vif_ref['network_id'])
-            q_tenant_id = network_ref['project_id']
+            q_tenant_id = (network_ref['project_id'] or
+                           FLAGS.quantum_default_tenant_id)
             net_id = network_ref['uuid']
 
             msg = _(msg_header + 'remove vif ' + vif_uuid)
