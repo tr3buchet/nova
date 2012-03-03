@@ -279,8 +279,8 @@ class QuantumManager(manager.SchedulerDependentManager):
                                                               instance_id,
                                                               networks)
         except Exception:
-            with utils.logging_error(_('Melange allocation failed')):
-                self._clean_up_melange(tenant_id, instance_id, False)
+            LOG.exception(_('Melange allocation failed'))
+            self._clean_up_melange(tenant_id, instance_id, False)
 
         for vif in vifs:
             pairs = []
