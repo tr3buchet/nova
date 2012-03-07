@@ -79,7 +79,7 @@ class NetworkController(object):
             LOG.exception(_("Create networks failed"), extra=network)
             raise exc.HTTPBadRequest("create_network failed.")
 
-        return {'network': network}
+        return {'network': network[0]}
 
 
 class Rs_networks(extensions.ExtensionDescriptor):
