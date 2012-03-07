@@ -400,7 +400,7 @@ class QuantumManager(manager.SchedulerDependentManager):
                                         'tenant_id': tenant_id})
 
         with utils.logging_error(_("Melange block deletetion failed")):
-            self.m_conn.delete_ip_block(network['id'])
+            self.m_conn.delete_ip_block(tenant_id, network['id'])
 
     def get_all_networks(self, context):
         tenant_id = context.project_id
