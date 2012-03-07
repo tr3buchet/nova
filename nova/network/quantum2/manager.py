@@ -349,8 +349,11 @@ class QuantumManager(manager.SchedulerDependentManager):
         # TODO(jkoelker) figure the return form
         return [self._normalize_network(ip_block)]
 
+    # NOTE(jkoelker) Accept **kwargs, for the bass ackwards compat. Dont use
+    #                them.
     @uuidize
-    def deallocate_for_instance(self, context, instance_id, project_id):
+    def deallocate_for_instance(self, context, instance_id, project_id,
+                                **kwargs):
         tenant_id = project_id
         vifs = self.m_conn.get_allocated_networks(instance_id)
         self.m_conn.allocate_for_instance_networks(tenant_id, instance_id,
