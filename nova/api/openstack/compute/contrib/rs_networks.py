@@ -28,7 +28,7 @@ import nova.network.api
 
 FLAGS = flags.FLAGS
 LOG = logging.getLogger(__name__)
-authorize = extensions.extension_authorizer('compute', 'networks')
+authorize = extensions.extension_authorizer('compute', 'rs-networks')
 
 
 class NetworkController(object):
