@@ -401,7 +401,7 @@ class QuantumManager(manager.SchedulerDependentManager):
 
     def get_all_networks(self, context):
         tenant_id = context.project_id
-        networks = self._get_all_networks(tenant_id)
+        networks = self.m_conn.get_networks_for_tenant(tenant_id)
         return [self._normalize_network(network) for network in networks]
 
     # NOTE(jkoelker) Accept **kwargs, for the bass ackwards compat. Dont use
