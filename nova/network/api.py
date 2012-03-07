@@ -75,6 +75,13 @@ class API(base.Base):
                          'args': {'fixed_range': None,
                                   'uuid': network_uuid}})
 
+    def create(self, context, label, cidr):
+        return rpc.call(context,
+                        FLAGS.network_topic,
+                        {'method': 'create_networks',
+                         'args': {'label': label,
+                                  'cidr': cidr}})
+
     def disassociate(self, context, network_uuid):
         return rpc.call(context,
                         FLAGS.network_topic,
