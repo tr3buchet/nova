@@ -87,9 +87,6 @@ network_opts = [
     cfg.StrOpt('flat_network_dns',
                default='8.8.4.4',
                help='Dns for simple network'),
-    cfg.BoolOpt('flat_injected',
-                default=False,
-                help='Whether to attempt to inject network setup into guest'),
     cfg.StrOpt('flat_interface',
                default=None,
                help='FlatDhcp will bridge into this interface if set'),
@@ -1801,7 +1798,7 @@ class NetworkManager(manager.SchedulerDependentManager):
                                                 project_only="allow_none")
 
     @wrap_check_policy
-    def get_vifs_by_instance(self, context, instance_id):
+    def get_vifs_by_instance(self, context, instance_id, instance_uuid):
         """Returns the vifs associated with an instance"""
         instance = self.db.instance_get(context, instance_id)
         vifs = self.db.virtual_interface_get_by_instance(context,

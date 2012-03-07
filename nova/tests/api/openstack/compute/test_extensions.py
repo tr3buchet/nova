@@ -195,6 +195,7 @@ class ExtensionControllerTest(ExtensionTestCase):
             "UsedLimits",
             "UserData",
             "VirtualInterfaces",
+            "VirtualInterfaces",
             "Volumes",
             ]
         self.ext_list.sort()

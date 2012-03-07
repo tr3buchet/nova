@@ -123,7 +123,8 @@ class NetworkRpcAPITestCase(test.TestCase):
 
     def test_get_vifs_by_instance(self):
         self._test_network_api('get_vifs_by_instance',
-                rpc_method='call', instance_id='fake_id')
+                rpc_method='call', instance_id='fake_id',
+                instance_uuid='fake_uuid')
 
     def test_get_vif_by_mac_address(self):
         self._test_network_api('get_vif_by_mac_address',
@@ -153,8 +154,12 @@ class NetworkRpcAPITestCase(test.TestCase):
                 rxtx_factor='fake_factor', vpn=False, requested_networks={})
 
     def test_deallocate_for_instance(self):
-        self._test_network_api('deallocate_for_instance', rpc_method='call',
-                instance_id='fake_id', project_id='fake_id', host='fake_host')
+        self._test_network_api('deallocate_for_instance',
+                               rpc_method='call',
+                               instance_id='fake_id',
+                               instance_uuid='fake_uuid',
+                               project_id='fake_id',
+                               host='fake_host')
 
     def test_add_fixed_ip_to_instance(self):
         self._test_network_api('add_fixed_ip_to_instance', rpc_method='call',

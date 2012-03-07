@@ -34,9 +34,11 @@ def compute_api_get(self, context, instance_id):
 
 def get_vifs_by_instance(self, context, instance_id):
     return [{'uuid': '00000000-0000-0000-0000-00000000000000000',
-             'address': '00-00-00-00-00-00'},
+             'address': '00-00-00-00-00-00',
+             'ip_addresses': []},
             {'uuid': '11111111-1111-1111-1111-11111111111111111',
-             'address': '11-11-11-11-11-11'}]
+             'address': '11-11-11-11-11-11',
+             'ip_addresses': []}]
 
 
 class ServerVirtualInterfaceTest(test.TestCase):

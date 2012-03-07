@@ -104,11 +104,11 @@ class NetworkAPI(rpc_proxy.RpcProxy):
                 'get_instance_id_by_floating_address',
                 address=address))
 
-    def get_vifs_by_instance(self, ctxt, instance_id):
+    def get_vifs_by_instance(self, ctxt, instance_id, instance_uuid):
         # NOTE(vish): When the db calls are converted to store network
         #             data by instance_uuid, this should pass uuid instead.
         return self.call(ctxt, self.make_msg('get_vifs_by_instance',
-                instance_id=instance_id))
+                instance_id=instance_id, instance_uuid=instance_uuid))
 
     def get_vif_by_mac_address(self, ctxt, mac_address):
         return self.call(ctxt, self.make_msg('get_vif_by_mac_address',
@@ -140,9 +140,13 @@ class NetworkAPI(rpc_proxy.RpcProxy):
                 project_id=project_id, host=host, rxtx_factor=rxtx_factor,
                 vpn=vpn, requested_networks=requested_networks))
 
-    def deallocate_for_instance(self, ctxt, instance_id, project_id, host):
+    def deallocate_for_instance(self, ctxt, instance_id, instance_uuid,
+                                project_id, host):
         return self.call(ctxt, self.make_msg('deallocate_for_instance',
-                instance_id=instance_id, project_id=project_id, host=host))
+                                             instance_id=instance_id,
+                                             instance_uuid=instance_uuid,
+                                             project_id=project_id,
+                                             host=host))
 
     def add_fixed_ip_to_instance(self, ctxt, instance_id, host, network_id):
         return self.call(ctxt, self.make_msg('add_fixed_ip_to_instance',

@@ -35,6 +35,10 @@ class QuotaClassSetsTest(test.TestCase):
 
     def setUp(self):
         super(QuotaClassSetsTest, self).setUp()
+        # NOTE(comstud): Fix the fact that loading the rax_networks
+        # module adds a 'networks' resource that messes with these
+        # tests...
+        quota_classes.QUOTAS._resources.pop('networks', None)
         self.controller = quota_classes.QuotaClassSetsController()
 
     def test_format_quota_set(self):

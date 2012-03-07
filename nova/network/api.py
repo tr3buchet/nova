@@ -19,14 +19,37 @@
 
 import functools
 import inspect
+import time
 
+from nova import config
 from nova.db import base
 from nova import exception
-from nova import flags
 from nova.network import model as network_model
 from nova.network import rpcapi as network_rpcapi
+from nova.openstack.common import cfg
 from nova.openstack.common import log as logging
 from nova.openstack.common import rpc
+from nova.openstack.common.rpc import common as rpc_common
+
+network_api_opts = [
+        cfg.IntOpt("get_nwinfo_timeout_retries",
+                default=5,
+                help="How many times to retry get_nwinfo on timeouts"),
+        cfg.IntOpt("get_nwinfo_timeout_retry_delay",
+                default=2,
+                help="Delay in seconds before retrying get_nwinfo on "
+                        "timeouts"),
+        cfg.IntOpt("get_nwinfo_error_retries",
+                default=2,
+                help="How many times to retry get_nwinfo on errors"),
+        cfg.IntOpt("get_nwinfo_error_retry_delay",
+                default=2,
+                help="Delay in seconds before retrying get_nwinfo on "
+                        "errors"),
+]
+
+CONF = config.CONF
+CONF.register_opts(network_api_opts)
 
 LOG = logging.getLogger(__name__)
 
@@ -130,8 +153,9 @@ class API(base.Base):
                 address)
 
     def get_vifs_by_instance(self, context, instance):
-        return self.network_rpcapi.get_vifs_by_instance(context,
-                instance['id'])
+        args = {'instance_id': instance['id'],
+                'instance_uuid': instance["uuid"]}
+        return self.network_rpcapi.get_vifs_by_instance(context, **args)
 
     def get_vif_by_mac_address(self, context, mac_address):
         return self.network_rpcapi.get_vif_by_mac_address(context, mac_address)
@@ -181,6 +205,43 @@ class API(base.Base):
                 affect_auto_assigned)
 
     @refresh_cache
+    def deallocate_interface_for_instance(self, context, instance,
+                                          interface_id, **kwargs):
+        """Allocates all network structures for an instance.
+
+        :returns: network info as from get_instance_nw_info() below
+        """
+        args = kwargs
+        args['instance_id'] = instance['id']
+        args['instance_uuid'] = instance['uuid']
+        args['project_id'] = instance['project_id']
+        args['host'] = instance['host']
+        args['interface_id'] = interface_id
+
+        return rpc.call(context, CONF.network_topic,
+                        {'method': 'deallocate_interface_for_instance',
+                         'args': args})
+
+    @refresh_cache
+    def allocate_interface_for_instance(self, context, instance, network_id,
+                                        **kwargs):
+        """Allocates all network structures for an instance.
+
+        :returns: network info as from get_instance_nw_info() below
+        """
+        args = kwargs
+        args['instance_id'] = instance['id']
+        args['instance_uuid'] = instance['uuid']
+        args['project_id'] = instance['project_id']
+        args['host'] = instance['host']
+        args['network_id'] = network_id
+        args['rxtx_factor'] = instance['instance_type']['rxtx_factor']
+
+        return rpc.call(context, CONF.network_topic,
+                        {'method': 'allocate_interface_for_instance',
+                         'args': args})
+
+    @refresh_cache
     def allocate_for_instance(self, context, instance, vpn,
                               requested_networks):
         """Allocates all network structures for an instance.
@@ -204,6 +265,7 @@ class API(base.Base):
 
         args = {}
         args['instance_id'] = instance['id']
+        args['instance_uuid'] = instance['uuid']
         args['project_id'] = instance['project_id']
         args['host'] = instance['host']
         self.network_rpcapi.deallocate_for_instance(context, **args)
@@ -240,7 +302,31 @@ class API(base.Base):
                 'rxtx_factor': instance['instance_type']['rxtx_factor'],
                 'host': instance['host'],
                 'project_id': instance['project_id']}
-        nw_info = self.network_rpcapi.get_instance_nw_info(context, **args)
+
+        num_tries = 1 + max(CONF.get_nwinfo_timeout_retries,
+            CONF.get_nwinfo_error_retries)
+        for i in xrange(num_tries):
+            try:
+                nw_info = self.network_rpcapi.get_instance_nw_info(context,
+                                                                   **args)
+                break
+            except rpc_common.Timeout, e:
+                tries_left = num_tries - i - 1
+                if not tries_left:
+                    raise
+                sleep_time = (i + 1) * CONF.get_nwinfo_timeout_retry_delay
+                LOG.error(_("Timeout getting nw_info: %(e)s: "
+                        "%(tries_left)s retry/retries left.  Next "
+                        "retry in %(sleep_time)d second(s)") % locals())
+            except Exception, e:
+                tries_left = num_tries - i - 1
+                if not tries_left:
+                    raise
+                sleep_time = (i + 1) * CONF.get_nwinfo_error_retry_delay
+                LOG.error(_("Error getting nw_info: %(e)s: "
+                        "%(tries_left)s retry/retries left.  Next "
+                        "retry in %(sleep_time)d second(s)") % locals())
+            time.sleep(sleep_time)
 
         return network_model.NetworkInfo.hydrate(nw_info)
 

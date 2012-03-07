@@ -381,7 +381,6 @@ class ComputeManager(manager.SchedulerDependentManager):
                                       'resume guests'), instance=instance)
 
                 elif drv_state == power_state.RUNNING:
-                    # VMWareAPI drivers will raise an exception
                     try:
                         self.driver.ensure_filtering_rules_for_instance(
                                                instance,
@@ -828,10 +827,19 @@ class ComputeManager(manager.SchedulerDependentManager):
             network_info = self.network_api.allocate_for_instance(
                                 context, instance, vpn=is_vpn,
                                 requested_networks=requested_networks)
-        except Exception:
+        except exception.NetworkOverQuota as oq:
+            raise exception.NetworkOverQuota(msg=oq.kwargs["msg"])
+        except Exception as err:
             LOG.exception(_('Instance failed network setup'),
                           instance=instance)
-            raise
+            if hasattr(err, "exc_type") and err.exc_type:
+                e = getattr(exception, err.exc_type, None)
+                if e is None:
+                    raise
+                value = err.value
+                raise e, value, None
+            else:
+                raise
 
         LOG.debug(_('Instance network_info: |%s|'), network_info,
                   instance=instance)
