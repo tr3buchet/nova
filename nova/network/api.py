@@ -16,6 +16,7 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+import functools
 
 import functools
 import inspect
@@ -92,6 +93,13 @@ class API(base.Base):
                         {'method': 'delete_network',
                          'args': {'fixed_range': None,
                                   'uuid': network_uuid}})
+
+    def create(self, context, label, cidr):
+        return rpc.call(context,
+                        FLAGS.network_topic,
+                        {'method': 'create_networks',
+                         'args': {'label': label,
+                                  'cidr': cidr}})
 
     def disassociate(self, context, network_uuid):
         return rpc.call(context,
@@ -228,6 +236,7 @@ class API(base.Base):
         """Deallocates all network structures related to instance."""
         args = kwargs
         args['instance_id'] = instance['id']
+        args['instance_uuid'] = instance['uuid']
         args['project_id'] = instance['project_id']
         args['host'] = instance['host']
         rpc.cast(context, FLAGS.network_topic,

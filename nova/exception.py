@@ -187,8 +187,16 @@ class ImagePaginationFailed(NovaException):
     message = _("Failed to paginate through images from image service")
 
 
+class VirtualInterfaceCleanupException(NovaException):
+    message = _("Virtual Interface deallocation failed: %(reason)s")
+
+
+class VirtualInterfaceIntegrityException(NovaException):
+    message = _("Virtual Interface has invalid data: %(reason)s")
+
+
 class VirtualInterfaceCreateException(NovaException):
-    message = _("Virtual Interface creation failed")
+    message = _("Virtual Interface creation failed: %(reason)s")
 
 
 class VirtualInterfaceMacAddressException(NovaException):
@@ -545,6 +553,10 @@ class NetworkNotCreated(NovaException):
 
 class NetworkNotFound(NotFound):
     message = _("Network %(network_id)s could not be found.")
+
+
+class NetworkFoundMultipleTimes(NotFound):
+    message = _("Network %(network_id)s matched multiple networks!")
 
 
 class NetworkNotFoundForBridge(NetworkNotFound):
