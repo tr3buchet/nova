@@ -222,21 +222,20 @@ class QuantumManager(manager.SchedulerDependentManager):
              network_tenant_ids,
              network_ids) = self._get_ips_and_ids_from_vif(m_vif)
 
-            m_vif_id =  m_vif['id']
             if not network_tenant_ids:
-                raise Exception(_("No network tenants for VIF "
-                                  "%(m_vif_id)s" % locals()))
+                raise Exception(_("No network tenants for VIF %s") %
+                                m_vif['id'])
             if not network_ids:
-                raise Exception(_("No networks for VIF "
-                                  "%(m_vif_id)s" % locals()))
+                raise Exception(_("No networks for VIF %s") %
+                                m_vif['id'])
 
             if len(network_tenant_ids) > 1:
-                raise Exception(_("Too many network tenants for VIF "
-                                  "%(m_vif_id)s" % locals()))
+                raise Exception(_("Too many network tenants for VIF %s") %
+                                m_vif['id'])
 
             if len(network_ids) > 1:
-                raise Exception(_("Too many networks for VIF "
-                                  "%(m_vif_id)s" % locals()))
+                raise Exception(_("Too many networks for VIF %s") %
+                                m_vif['id'])
 
             network_tenant_id = network_tenant_ids.pop()
             network_id = network_ids.pop()
