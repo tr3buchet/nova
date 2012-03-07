@@ -39,7 +39,12 @@ quantum_opts = [
     ]
 
 FLAGS = flags.FLAGS
-FLAGS.register_opts(quantum_opts)
+
+for opt in quantum_opts:
+    try:
+        FLAGS.register_opt(opt)
+    except flags.cfg.DuplicateOptError:
+        pass
 
 
 class QuantumClientConnection(object):

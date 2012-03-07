@@ -1045,7 +1045,8 @@ class API(base.Base):
                 'instance_name': 'name',
                 'tenant_id': 'project_id',
                 'flavor': _remap_flavor_filter,
-                'fixed_ip': _remap_fixed_ip_filter}
+                'fixed_ip': _remap_fixed_ip_filter,
+                'ip': 'ip'}
 
         # copy from search_opts, doing various remappings as necessary
         for opt, value in search_opts.iteritems():
