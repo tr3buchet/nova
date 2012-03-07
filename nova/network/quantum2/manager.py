@@ -378,11 +378,11 @@ class QuantumManager(manager.SchedulerDependentManager):
 
     # NOTE(jkoelker) Accept **kwargs, for the bass ackwards compat. Dont use
     #                them.
-    def delete_network(self, context, network_uuid, **kwargs):
+    def delete_network(self, context, uuid, **kwargs):
         tenant_id = context.project_id
         # NOTE(jkoelker) The param uuid is the network_id needs to be fixed
         #                in the api.
-        network_id = network_uuid
+        network_id = uuid
         network = self._get_network(network_id, tenant_id)
 
         # Refuse to delete a network that has attached ports
