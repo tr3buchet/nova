@@ -62,7 +62,7 @@ class NetworkController(object):
             raise exc.HTTPNotFound(_("Network not found"))
         return exc.HTTPAccepted()
 
-    def create(self, req, id, body):
+    def create(self, req, body):
         if not body:
             raise exc.HTTPUnprocessableEntity()
 
