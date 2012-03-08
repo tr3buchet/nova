@@ -97,7 +97,7 @@ class QuantumManager(manager.SchedulerDependentManager):
                                                    [])
         if raise_exception:
             # TODO(jkoelker) Create a new exception
-            raise exception.VirtualInterfaceCreateException()
+            raise exception.VirtualInterfaceCleanupException()
 
     def _deallocate_port(self, tenant_id, network_id, interface_id):
         port_id = self.q_conn.get_port_by_attachment(tenant_id,
@@ -138,10 +138,9 @@ class QuantumManager(manager.SchedulerDependentManager):
                     if net['network_id'] == network_id]
 
         if not networks:
-            raise Exception(_('Network %s not found') % network_id)
+            raise exception.NetworkNotFound(network_id=network_id)
         elif len(networks) > 1:
-            raise Exception(_('Network %s found multiple times!') %
-                            network_id)
+            raise exception.NetworkFoundMultipleTimes(network_id=network_id)
 
         return networks[0]
 
@@ -223,19 +222,19 @@ class QuantumManager(manager.SchedulerDependentManager):
              network_ids) = self._get_ips_and_ids_from_vif(m_vif)
 
             if not network_tenant_ids:
-                raise Exception(_("No network tenants for VIF %s") %
-                                m_vif['id'])
+                msg = _("No network tenants for VIF %s") % m_vif['id']
+                raise exception.VirtualInterfaceCreateException(msg)
             if not network_ids:
-                raise Exception(_("No networks for VIF %s") %
-                                m_vif['id'])
+                msg = _("No networks for VIF %s") % m_vif['id']
+                raise exception.VirtualInterfaceCreateException(msg)
 
             if len(network_tenant_ids) > 1:
-                raise Exception(_("Too many network tenants for VIF %s") %
-                                m_vif['id'])
+                msg = _("Too many network tenants for VIF %s") % m_vif['id']
+                raise exception.VirtualInterfaceCreateException(msg)
 
             if len(network_ids) > 1:
-                raise Exception(_("Too many networks for VIF %s") %
-                                m_vif['id'])
+                msg = _("Too many networks for VIF %s") % m_vif['id']
+                raise exception.VirtualInterfaceCreateException(msg)
 
             network_tenant_id = network_tenant_ids.pop()
             network_id = network_ids.pop()
@@ -392,8 +391,7 @@ class QuantumManager(manager.SchedulerDependentManager):
         try:
             ports = self.q_conn.get_attached_ports(tenant_id, network_id)
             if len(ports) > 0:
-                raise Exception(_('Network %s has active ports, cannot '
-                                  'delete') % network_id)
+                raise exception.NetworkBusy(network=network_id)
             self.q_conn.delete_network(tenant_id, network_id)
             LOG.debug(_('Deleting network %(network_id)s for tenant '
                         '%(tenant_id)s') % {'network_id': network_id,

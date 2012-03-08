@@ -50,6 +50,8 @@ class NetworkController(object):
             network = self.network_api.get(context, id)
         except exception.NetworkNotFound:
             raise exc.HTTPNotFound(_("Network not found"))
+        except exception.NetworkFoundMultipleTimes:
+            raise exc.HTTPNotFound(_("Network matched multiple items"))
         return {'network': network}
 
     def delete(self, req, id):
@@ -60,6 +62,10 @@ class NetworkController(object):
             self.network_api.delete(context, id)
         except exception.NetworkNotFound:
             raise exc.HTTPNotFound(_("Network not found"))
+        except exception.NetworkFoundMultipleTimes:
+            raise exc.HTTPNotFound(_("Network matched multiple items"))
+        except exception.NetworkBusy:
+            raise exc.HTTPForbidden(_("Network has active ports"))
         return exc.HTTPAccepted()
 
     def create(self, req, body):
