@@ -23,6 +23,7 @@ from nova.api.openstack import extensions
 from nova import exception
 from nova import flags
 from nova import log as logging
+from nova.rpc import common as rpc_common
 import nova.network.api
 
 
@@ -31,10 +32,33 @@ LOG = logging.getLogger(__name__)
 authorize = extensions.extension_authorizer('compute', 'rs-networks')
 
 
-class NetworkController(object):
-
-    def __init__(self, network_api=None):
+class NetworkAPIProxy(object):
+    def __init__(self, network_api):
         self.network_api = network_api or nova.network.api.API()
+
+    def _network_call(func):
+        """
+        Call the network api, trying to reraise any exceptions
+        """
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except rpc_common.RemoteError as err:
+                e = getattr(exception, err.exec_type, None)
+                if e is None:
+                    raise
+                value = getattr(err, "value", None)
+                if value is None:
+                    raise e()
+                raise e(value)
+
+    def __getattribute__(self, name):
+        return self.wrapped(object.__getattribute__(self, name))
+
+
+class NetworkController(object):
+    def __init__(self, network_api=None):
+        self.network_api = NetworkAPIProxy(network_api)
 
     def index(self, req):
         context = req.environ['nova.context']
