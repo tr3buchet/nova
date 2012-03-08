@@ -389,15 +389,18 @@ class QuantumManager(manager.SchedulerDependentManager):
         network = self._get_network(network_id, tenant_id)
 
         # Refuse to delete a network that has attached ports
-        ports = self.q_conn.get_attached_ports(tenant_id, network_id)
-        if len(ports) > 0:
-            raise Exception(_('Network %s has active ports, cannot '
-                              'delete') % network_id)
-
-        self.q_conn.delete_network(tenant_id, network_id)
-        LOG.debug(_('Deleting network %(network_id)s for tenant '
-                    '%(tenant_id)s') % {'network_id': network_id,
-                                        'tenant_id': tenant_id})
+        try:
+            ports = self.q_conn.get_attached_ports(tenant_id, network_id)
+            if len(ports) > 0:
+                raise Exception(_('Network %s has active ports, cannot '
+                                  'delete') % network_id)
+            self.q_conn.delete_network(tenant_id, network_id)
+            LOG.debug(_('Deleting network %(network_id)s for tenant '
+                        '%(tenant_id)s') % {'network_id': network_id,
+                                            'tenant_id': tenant_id})
+        except exception.QuantumNotFoundException:
+            LOG.exception(_('Deleting quantum network %s failed') %
+                          network_id)
 
         with utils.logging_error(_("Melange block deletetion failed")):
             self.m_conn.delete_ip_block(tenant_id, network['id'])
