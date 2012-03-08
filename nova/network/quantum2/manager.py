@@ -398,7 +398,7 @@ class QuantumManager(manager.SchedulerDependentManager):
             LOG.debug(_('Deleting network %(network_id)s for tenant '
                         '%(tenant_id)s') % {'network_id': network_id,
                                             'tenant_id': tenant_id})
-        except exception.QuantumNotFoundException:
+        except quantum_connection.quantum_client.QuantumNotFoundException:
             LOG.exception(_('Deleting quantum network %s failed') %
                           network_id)
 
