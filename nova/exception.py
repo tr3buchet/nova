@@ -182,7 +182,7 @@ class ImagePaginationFailed(NovaException):
     message = _("Failed to paginate through images from image service")
 
 
-class VirtualInterfaceCleanupFailed(NovaException):
+class VirtualInterfaceCleanupException(NovaException):
     message = _("Virtual Interface deallocation failed")
 
 
