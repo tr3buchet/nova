@@ -40,7 +40,7 @@ def _network_call(func):
         try:
             return func(*args, **kwargs)
         except rpc_common.RemoteError as err:
-            LOG.error(_("Remote Traceback: %s") % err.traceback)
+            LOG.error(_("Remote Traceback: %s"), err.traceback)
             e = getattr(exception, err.exc_type, None)
             if e is None:
                 raise
