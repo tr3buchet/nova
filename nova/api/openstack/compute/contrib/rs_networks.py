@@ -32,28 +32,29 @@ LOG = logging.getLogger(__name__)
 authorize = extensions.extension_authorizer('compute', 'rs-networks')
 
 
+def _network_call(func):
+    """
+    Call the network api, trying to reraise any exceptions
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except rpc_common.RemoteError as err:
+            e = getattr(exception, err.exec_type, None)
+            if e is None:
+                raise
+            value = getattr(err, "value", None)
+            if value is None:
+                raise e()
+            raise e(value)
+
+
 class NetworkAPIProxy(object):
     def __init__(self, network_api):
         self.network_api = network_api or nova.network.api.API()
 
-    def _network_call(func):
-        """
-        Call the network api, trying to reraise any exceptions
-        """
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except rpc_common.RemoteError as err:
-                e = getattr(exception, err.exec_type, None)
-                if e is None:
-                    raise
-                value = getattr(err, "value", None)
-                if value is None:
-                    raise e()
-                raise e(value)
-
     def __getattribute__(self, name):
-        return self.wrapped(object.__getattribute__(self, name))
+        return _network_call(object.__getattribute__(self, name))
 
 
 class NetworkController(object):
