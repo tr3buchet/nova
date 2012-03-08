@@ -47,6 +47,7 @@ def _network_call(func):
             if value is None:
                 raise e()
             raise e(value)
+    return wrapper
 
 
 class NetworkAPIProxy(object):
@@ -54,10 +55,8 @@ class NetworkAPIProxy(object):
         self.api = network_api or nova.network.api.API()
 
     def __getattribute__(self, name):
-        try:
-            return object.__getattribute__(self, name)
-        except AttributeError:
-            return _network_call(getattr(self.api, name))
+        api = object.__getattribute__(self, 'api')
+        return _network_call(object.__getattribute__(api, name))
 
 
 class NetworkController(object):
