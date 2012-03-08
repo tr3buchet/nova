@@ -51,10 +51,13 @@ def _network_call(func):
 
 class NetworkAPIProxy(object):
     def __init__(self, network_api):
-        self.network_api = network_api or nova.network.api.API()
+        self.api = network_api or nova.network.api.API()
 
     def __getattribute__(self, name):
-        return _network_call(object.__getattribute__(self, name))
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            return _network_call(getattr(self.api, name))
 
 
 class NetworkController(object):
