@@ -333,6 +333,7 @@ class QuantumManager(manager.SchedulerDependentManager):
         msg = _('Network created in quantum')
         LOG.debug(_log_kwargs(msg, **extra), extra=extra)
 
+        gateway = kwargs.get('gateway')
         cidr = netaddr.IPNetwork(cidr)
         network_address = netaddr.IPNetwork(cidr).network
         octet = network_address.words[-1]
@@ -344,7 +345,8 @@ class QuantumManager(manager.SchedulerDependentManager):
                                                     octet)
         ip_block = self.m_conn.create_ip_block(tenant_id, str(cidr),
                                                network_id,
-                                               policy_id=policy['id'])
+                                               policy_id=policy['id'],
+                                               gateway=gateway)
         # TODO(jkoelker) figure the return form
         return [self._normalize_network(ip_block)]
 
