@@ -46,8 +46,13 @@ def plugin_trigger(module=None, name=None):
     Exceptions in plugins are caught and logged.
 
     """
-    _plugins = [{'plugin': p,
-                 'callable': p.load()} for p in plugins(module, name)]
+    _plugins = []
+
+    for plugin in plugins(module, name):
+        try:
+            _plugins.append({'plugin': plugin, 'callable': plugin.load()})
+        except ImportError:
+            log.exception(_('Could not load plugin %s'), plugin)
 
     def trigger(*args, **kwargs):
         for plugin in _plugins:
