@@ -27,3 +27,4 @@ pycrypto
 Babel>=0.9.6
 iso8601>=0.1.4
 python-quantumclient
+extensions
