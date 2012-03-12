@@ -425,3 +425,12 @@ class QuantumManager(manager.SchedulerDependentManager):
 
         network = self._get_network(network_id, tenant_id)
         return self._normalize_network(network)
+
+    # NOTE(jkoelker) Stub function. validate_networks is only called
+    #                in the compute api prior to creating the instance
+    #                passing here since it would perform the same checks
+    #                as in allocate_for_instance. In the effort of not
+    #                making extraneous calls, we're just letting the
+    #                allocate_for_instance fail there.
+    def validate_networks(self, context, networks):
+        pass
