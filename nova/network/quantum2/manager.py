@@ -317,7 +317,7 @@ class QuantumManager(manager.SchedulerDependentManager):
     #                pluralized for da backwards compatability.
     # NOTE(jkoelker) Accept **kwargs, for the bass ackwards compat. Dont use
     #                them.
-    def create_networks(self, context, label, cidr, **kwargs):
+    def create_networks(self, context, label, cidr, gateway=None, **kwargs):
         # NOTE(jkoelker) For devstack compat we'll assume the defaul
         #                tenant if it is None in the context
         # NOTE(jkoelker) For the time being we only support 1 subnet
@@ -333,7 +333,6 @@ class QuantumManager(manager.SchedulerDependentManager):
         msg = _('Network created in quantum')
         LOG.debug(_log_kwargs(msg, **extra), extra=extra)
 
-        gateway = kwargs.get('gateway')
         cidr = netaddr.IPNetwork(cidr)
         network_address = netaddr.IPNetwork(cidr).network
         octet = network_address.words[-1]
