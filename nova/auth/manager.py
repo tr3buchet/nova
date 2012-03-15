@@ -247,7 +247,6 @@ class AuthManager(object):
         __init__ is run every time AuthManager() is called, so we only
         reset the driver if it is not set or a new driver is specified.
         """
-        self.network_manager = utils.import_object(FLAGS.network_manager)
         if driver or not getattr(self, 'driver', None):
             self.driver = utils.import_class(driver or FLAGS.auth_driver)
         if AuthManager.mc is None:

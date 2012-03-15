@@ -75,7 +75,7 @@ class API(base.Base):
                          'args': {'fixed_range': None,
                                   'uuid': network_uuid}})
 
-    def create(self, context, label, cidr):
+    def create(self, context, label, cidr, gateway=None, **kwargs):
         return rpc.call(context,
                         FLAGS.network_topic,
                         {'method': 'create_networks',

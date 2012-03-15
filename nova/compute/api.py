@@ -114,7 +114,8 @@ class API(base.Base):
         self.image_service = (image_service or
                               nova.image.get_default_image_service())
 
-        self.network_api = network_api or network.API()
+        self.network_api = network_api or \
+                           utils.import_object(FLAGS.network_api_class)
         self.volume_api = volume_api or volume.API()
         super(API, self).__init__(**kwargs)
 
