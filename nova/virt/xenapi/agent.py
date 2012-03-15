@@ -18,6 +18,7 @@
 import base64
 import binascii
 import os
+import random
 import time
 import uuid
 
@@ -243,6 +244,20 @@ class XenAPIBasedAgent(object):
             return None
 
         return resp['message']
+
+    def activate_instance(self, session, instance, vm_ref, config):
+        """Creates uuid arg to pass to make_agent_call and calls it."""
+
+        # Windows doesn't use a dict, but also doesn't have a list of
+        # domains nor a profile name
+        if isinstance(config, dict):
+            if 'domains' in config:
+                # Shuffle list so not all instances prefer the same server
+                random.shuffle(config['domains'])
+            config['profile'] = instance['name']
+
+        args = {'config': jsonutils.dumps(config)}
+        _call_agent(session, instance, vm_ref, 'kmsactivate', args)
 
 
 def find_guest_agent(base_dir):

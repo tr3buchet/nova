@@ -1283,6 +1283,12 @@ class API(base.Base):
         if base_image_ref:
             properties['base_image_ref'] = base_image_ref
 
+        # Check if this image had a RAX activation profile to propagate
+        # to the snapshot image:
+        profile = system_meta.get('image_rax_activation_profile')
+        if profile:
+            properties['rax_activation_profile'] = profile
+
         if image_type == 'backup':
             properties['backup_type'] = backup_type
 

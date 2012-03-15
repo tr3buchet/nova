@@ -58,7 +58,14 @@ xenapi_vmops_opts = [
                     'to go to running state'),
     cfg.StrOpt('xenapi_vif_driver',
                default='nova.virt.xenapi.vif.XenAPIBridgeDriver',
-               help='The XenAPI VIF driver using XenServer Network APIs.')
+               help='The XenAPI VIF driver using XenServer Network APIs.'),
+    cfg.BoolOpt('xenapi_generate_swap',
+                default=False,
+                help='Whether to generate swap '
+                     '(False means fetching it from OVA)'),
+    cfg.StrOpt('image_activation_file',
+                default=None,
+                help=_('JSON file containing image activation configuration')),
     ]
 
 CONF = config.CONF
@@ -76,6 +83,41 @@ DEVICE_RESCUE = '1'
 DEVICE_SWAP = '2'
 DEVICE_EPHEMERAL = '3'
 DEVICE_CD = '4'
+
+
+class RaxImageActivationConfig(object):
+    """Manage RAX image license activation config state """
+    def __init__(self):
+        self._cache = {}
+
+        if CONF.image_activation_file:
+            self._file_path = CONF.find_file(CONF.image_activation_file)
+            self.reload()
+
+    def reload(self):
+        """(Re)load config from JSON file
+        The file is a dict mapping each activation profile idsto
+        a configuration value.
+        E.x. file:
+        {
+            "1-2-3-4-5": "useful_config_value"
+        }
+        """
+
+        def _reload(data):
+            self._config = jsonutils.loads(data)
+
+        utils.read_cached_file(self._file_path, self._cache,
+                               reload_func=_reload)
+
+    def get(self, profile_name):
+        """Get config values for the given profile name"""
+
+        if not CONF.image_activation_file:
+            return None
+
+        self.reload()
+        return self._config.get(profile_name)
 
 
 def cmp_version(a, b):
@@ -156,6 +198,8 @@ class VMOps(object):
         vif_impl = importutils.import_class(CONF.xenapi_vif_driver)
         self.vif_driver = vif_impl(xenapi_session=self._session)
         self.default_root_dev = '/dev/sda'
+        # configs for image license activation:
+        self._rax_image_activation_config = RaxImageActivationConfig()
 
     @property
     def agent_enabled(self):
@@ -363,7 +407,7 @@ class VMOps(object):
         @step
         def boot_instance_step(undo_mgr, vm_ref):
             self._boot_new_instance(instance, vm_ref, injected_files,
-                                    admin_password)
+                                    admin_password, image_meta)
 
         @step
         def apply_security_group_filters_step(undo_mgr):
@@ -517,7 +561,7 @@ class VMOps(object):
                                         ephemeral_gb)
 
     def _boot_new_instance(self, instance, vm_ref, injected_files,
-                           admin_password):
+                           admin_password, image_meta):
         """Boot a new instance and configure it."""
         LOG.debug(_('Starting VM'), instance=instance)
         self._start(instance, vm_ref)
@@ -583,6 +627,19 @@ class VMOps(object):
             LOG.debug(_("Setting VCPU weight"), instance=instance)
             self._session.call_xenapi('VM.add_to_VCPUs_params', vm_ref,
                                       'weight', str(vcpu_weight))
+
+        # Activate OS (if necessary)
+        profile = image_meta.get('properties', {}).\
+                             get('rax_activation_profile')
+        if profile:
+            LOG.debug(_("RAX Activation Profile: %r"), profile,
+                      instance=instance)
+
+            # get matching activation config for this profile:
+            config = self._rax_image_activation_config.get(profile)
+            if config:
+                agent.activate_instance(self._session, instance, vm_ref,
+                                        config)
 
     def _get_vm_opaque_ref(self, instance):
         """Get xapi OpaqueRef from a db record."""

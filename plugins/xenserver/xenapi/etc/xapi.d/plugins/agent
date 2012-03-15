@@ -180,6 +180,22 @@ def agent_update(self, arg_dict):
     return resp
 
 
+def kmsactivate(self, arg_dict):
+    """Expects an set of configuration options, then directs the agent
+    to activate the OS."""
+    timeout = int(arg_dict.pop('timeout', DEFAULT_TIMEOUT))
+    config = json.loads(arg_dict['config'])
+    arg_dict['value'] = json.dumps({'name': 'kmsactivate', 'value': config})
+    request_id = arg_dict["id"]
+    arg_dict['path'] = 'data/host/%s' % request_id
+    xenstore.write_record(self, arg_dict)
+    try:
+        resp = _wait_for_agent(self, request_id, arg_dict, timeout)
+    except TimeoutError, e:
+        raise PluginError(e)
+    return resp
+
+
 def _get_agent_features(self, arg_dict):
     """Return an array of features that an agent supports."""
     timeout = int(arg_dict.pop('timeout', DEFAULT_TIMEOUT))
@@ -235,4 +251,5 @@ if __name__ == "__main__":
         "password": password,
         "resetnetwork": resetnetwork,
         "inject_file": inject_file,
-        "agentupdate": agent_update})
+        "agentupdate": agent_update,
+        "kmsactivate": kmsactivate})
