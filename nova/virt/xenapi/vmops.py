@@ -24,6 +24,7 @@ import binascii
 import cPickle as pickle
 import functools
 import os
+import random
 import time
 import uuid
 
@@ -66,13 +67,16 @@ xenapi_vmops_opts = [
                 default=False,
                 help='Whether to generate swap '
                      '(False means fetching it from OVA)'),
+    cfg.StrOpt('image_activation_file',
+                default=None,
+                help=_('JSON file containing image activation configuration')),
+
     ]
 
 FLAGS = flags.FLAGS
 FLAGS.register_opts(xenapi_vmops_opts)
 
 flags.DECLARE('vncserver_proxyclient_address', 'nova.vnc')
-
 
 RESIZE_TOTAL_STEPS = 5
 
@@ -81,6 +85,41 @@ DEVICE_RESCUE = '1'
 DEVICE_SWAP = '2'
 DEVICE_EPHEMERAL = '3'
 DEVICE_CD = '4'
+
+
+class RaxImageActivationConfig(object):
+    """Manage RAX image license activation config state """
+    def __init__(self):
+        self._cache = {}
+
+        if FLAGS.image_activation_file:
+            self._file_path = FLAGS.find_file(FLAGS.image_activation_file)
+            self.reload()
+
+    def reload(self):
+        """(Re)load config from JSON file
+        The file is a dict mapping each activation profile idsto
+        a configuration value.
+        E.x. file:
+        {
+            "1-2-3-4-5": "useful_config_value"
+        }
+        """
+
+        def _reload(data):
+            self._config = jsonutils.loads(data)
+
+        utils.read_cached_file(self._file_path, self._cache,
+                               reload_func=_reload)
+
+    def get(self, image_id):
+        """Get config values for the given image id """
+
+        if not FLAGS.image_activation_file:
+            return None
+
+        self.reload()
+        return self._config.get(image_id)
 
 
 def cmp_version(a, b):
@@ -161,6 +200,8 @@ class VMOps(object):
         self.firewall_driver = fw_class(xenapi_session=self._session)
         vif_impl = importutils.import_class(FLAGS.xenapi_vif_driver)
         self.vif_driver = vif_impl(xenapi_session=self._session)
+        # configs for image license activation:
+        self._rax_image_activation_config = RaxImageActivationConfig()
 
     def list_instances(self):
         """List VM instances."""
@@ -324,7 +365,7 @@ class VMOps(object):
 
         @step
         def boot_instance_step(undo_mgr, vm_ref):
-            self._boot_new_instance(instance, vm_ref)
+            self._boot_new_instance(instance, vm_ref, image_meta)
 
         @step
         def apply_security_group_filters_step(undo_mgr):
@@ -462,7 +503,7 @@ class VMOps(object):
             vm_utils.generate_ephemeral(self._session, instance, vm_ref,
                                         DEVICE_EPHEMERAL, ephemeral_gb)
 
-    def _boot_new_instance(self, instance, vm_ref):
+    def _boot_new_instance(self, instance, vm_ref, image_meta):
         """Boot a new instance and configure it."""
         LOG.debug(_('Starting VM'), instance=instance)
         self._start(instance, vm_ref)
@@ -544,6 +585,18 @@ class VMOps(object):
             LOG.debug(_("Setting VCPU weight"), instance=instance)
             self._session.call_xenapi('VM.add_to_VCPUs_params', vm_ref,
                                       'weight', str(vcpu_weight))
+
+        # Activate OS (if necessary)
+        profile = image_meta.get('properties', {}).\
+                             get('rax_activation_profile')
+        if profile:
+            LOG.debug(_("RAX Activation Profile: %r"), profile,
+                      instance=instance)
+
+            # get matching activation config for this profile:
+            config = self._rax_image_activation_config.get(profile)
+            if config:
+                self.activate_instance(instance, config)
 
     def _get_vm_opaque_ref(self, instance):
         vm_ref = vm_utils.lookup(self._session, instance['name'])
@@ -1448,6 +1501,20 @@ class VMOps(object):
     def reset_network(self, instance, vm_ref=None):
         """Calls resetnetwork method in agent."""
         self._make_agent_call('resetnetwork', instance, vm_ref=vm_ref)
+
+    def activate_instance(self, instance, config):
+        """Creates uuid arg to pass to make_agent_call and calls it."""
+
+        # Windows doesn't use a dict, but also doesn't have a list of
+        # domains nor a profile name
+        if isinstance(config, dict):
+            if 'domains' in config:
+                # Shuffle list so not all instances prefer the same server
+                random.shuffle(config['domains'])
+            config['profile'] = instance.name
+
+        args = {'config': jsonutils.dumps(config)}
+        self._make_agent_call('kmsactivate', instance, args)
 
     def inject_hostname(self, instance, vm_ref, hostname):
         """Inject the hostname of the instance into the xenstore."""

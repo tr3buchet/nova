@@ -1160,6 +1160,16 @@ class API(base.Base):
             'image_type': image_type,
         }
 
+        # Persist base image pointer as a Glance image property
+        system_meta = self.db.instance_system_metadata_get(
+                context, instance_uuid)
+
+        # Check if this image had a RAX activation profile to propagate
+        # to the snapshot image:
+        profile = system_meta.get('image_rax_activation_profile')
+        if profile:
+            properties['rax_activation_profile'] = profile
+
         sent_meta = {'name': name, 'is_public': False}
 
         if image_type == 'backup':
