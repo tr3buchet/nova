@@ -201,9 +201,8 @@ class ComputeManager(manager.SchedulerDependentManager):
             LOG.error(_("Unable to load the virtualization driver: %s") % (e))
             sys.exit(1)
 
-        self.network_api = network.API()
+        self.network_api = utils.import_object(FLAGS.network_api_class)
         self.volume_api = volume.API()
-        self.network_manager = utils.import_object(FLAGS.network_manager)
         self._last_host_check = 0
         self._last_bw_usage_poll = 0
         self._last_info_cache_heal = 0
