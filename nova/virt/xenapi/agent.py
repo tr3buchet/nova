@@ -18,6 +18,7 @@
 import base64
 import binascii
 import os
+import random
 import time
 import uuid
 
@@ -195,6 +196,21 @@ def inject_file(session, instance, vm_ref, path, contents):
 def resetnetwork(session, instance, vm_ref):
     """Calls resetnetwork method in agent."""
     _call_agent(session, instance, vm_ref, 'resetnetwork')
+
+
+def activate_instance(session, instance, vm_ref, config):
+    """Creates uuid arg to pass to make_agent_call and calls it."""
+
+    # Windows doesn't use a dict, but also doesn't have a list of
+    # domains nor a profile name
+    if isinstance(config, dict):
+        if 'domains' in config:
+            # Shuffle list so not all instances prefer the same server
+            random.shuffle(config['domains'])
+        config['profile'] = instance.name
+
+    args = {'config': jsonutils.dumps(config)}
+    _call_agent(session, instance, vm_ref, 'kmsactivate', args)
 
 
 class SimpleDH(object):
