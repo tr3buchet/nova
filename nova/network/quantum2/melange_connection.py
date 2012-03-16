@@ -282,3 +282,14 @@ class MelangeConnection(object):
         body = {'ip_octet': {'octet': octet}}
         res = json.loads(self.post(url, body=body))
         return res['ip_octet']
+
+    def get_instance_ids_by_ip_address(self, context, address):
+        url = ("ipam/allocated_ip_addresses")
+
+        response = self.get(url, params={'address': address},
+                            headers=json_content_type)
+
+        ips = json.loads(response).get('ip_addresses', [])
+
+        # TODO (aaron.lee) melange should be storing & returning instance_uuid!
+        return [ip.get('used_by_device') for ip in ips]

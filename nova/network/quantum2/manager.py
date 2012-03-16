@@ -19,10 +19,12 @@ import functools
 
 import netaddr
 
+from nova import db
 from nova import exception
 from nova import flags
 from nova import log as logging
 from nova import manager
+from nova.network import manager as network_manager
 from nova.network import model
 from nova.network.quantum2 import melange_connection
 from nova.network.quantum import quantum_connection
@@ -439,6 +441,18 @@ class QuantumManager(manager.SchedulerDependentManager):
     #                dhcp and multi_host setups
     def setup_networks_on_host(self, *args, **kwargs):
         pass
+
+    @network_manager.wrap_check_policy
+    def get_instance_uuids_by_ip_filter(self, context, filters):
+        # This is not returning the instance IDs like the method name would
+        # make you think, its matching the return format of the method it's
+        # overriding. Yahrrr
+        address = filters.get('ip', None)
+        instance_ids = self.m_conn.get_instance_ids_by_ip_address(
+                                                            context, address)
+        instances = [db.instance_get_by_uuid(context,
+                                             id) for id in instance_ids]
+        return [{'instance_uuid':instance.uuid} for instance in instances]
 
     # NOTE(jkoelker) Stub function. validate_networks is only called
     #                in the compute api prior to creating the instance

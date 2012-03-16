@@ -17,6 +17,7 @@
 
 import mock
 
+from nova import db
 from nova import context
 from nova import exception
 from nova import flags
@@ -793,3 +794,32 @@ class Quantum2ManagerVifsToModel(test.TestCase):
         res = self.net_manager._vifs_to_model([self.vif])
         self.assertEquals(res[0]['network']['subnets'][0]['ips'][0]['address'],
                           '10.0.0.100')
+
+
+class Quantum2GetInstanceUUIDS(test.TestCase):
+    def setUp(self):
+        super(Quantum2GetInstanceUUIDS, self).setUp()
+        self.net_manager = manager.QuantumManager()
+
+        self.context = context.RequestContext(user_id=1,
+                                              project_id=1)
+
+    def test_get_instance_uuids_by_ip_filter(self):
+        filters = {'ip': 'ip_address'}
+
+        self.stubs.Set(melange_connection.MelangeConnection,
+                       'get_instance_ids_by_ip_address',
+                       lambda a, b, c: ["instance_id"])
+
+        instance = self.mox.CreateMockAnything()
+        instance.uuid = 'instance_uuid'
+
+        self.mox.StubOutWithMock(db, 'instance_get_by_uuid')
+        db.instance_get_by_uuid(self.context,
+                                'instance_id').AndReturn(instance)
+
+        self.mox.ReplayAll()
+
+        uuids = self.net_manager.get_instance_uuids_by_ip_filter(self.context,
+                                                                filters)
+        self.assertEquals(uuids, [{'instance_uuid':'instance_uuid'}])
