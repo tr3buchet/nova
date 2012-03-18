@@ -277,8 +277,12 @@ class QuantumManager(manager.SchedulerDependentManager):
             networks = [n for n in networks
                         if n['network_id'] in requested_networks]
 
-        networks = [{'id': net['network_id'],
-                     'tenant_id': net['tenant_id']} for net in networks]
+        # Make sure we only request one allocatoin per network
+        networks = set([(net['network_id'],
+                         net['tenant_id']) for net in networks])
+
+        networks = [{'id': net[0],
+                     'tenant_id': net[1]} for net in networks]
         vifs = []
         try:
             vifs = self.m_conn.allocate_for_instance_networks(tenant_id,
