@@ -435,6 +435,11 @@ class QuantumManager(manager.SchedulerDependentManager):
         network = self._get_network(network_id, tenant_id)
         return self._normalize_network(network)
 
+    # NOTE(jkoelker) Stub function. setup_networks_on_host is for legacy
+    #                dhcp and multi_host setups
+    def setup_networks_on_host(self, *args, **kwargs):
+        pass
+
     # NOTE(jkoelker) Stub function. validate_networks is only called
     #                in the compute api prior to creating the instance
     #                passing here since it would perform the same checks
