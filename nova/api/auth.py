@@ -78,7 +78,7 @@ class NovaKeystoneContext(wsgi.Middleware):
             LOG.debug("Neither X_USER_ID nor X_USER found in request")
             return webob.exc.HTTPUnauthorized()
         # get the roles
-        roles = [r.strip() for r in req.headers.get('X_ROLE', '').split(',')]
+        roles = [r.strip() for r in req.headers.get('X_ROLES', '').split(',')]
         if 'X_TENANT_ID' in req.headers:
             # This is the new header since Keystone went to ID/Name
             project_id = req.headers['X_TENANT_ID']

@@ -68,3 +68,15 @@ class ContextTestCase(test.TestCase):
         self.assertTrue(c)
         self.assertIn("'extra_arg1': 'meow'", info['log_msg'])
         self.assertIn("'extra_arg2': 'wuff'", info['log_msg'])
+
+    def test_request_context_sets_is_admin_with_identity(self):
+        ctxt = context.RequestContext('111',
+                                      '222',
+                                      roles=['identity:admin', 'weasel'])
+        self.assertEquals(ctxt.is_admin, True)
+
+    def test_request_context_sets_is_admin_upcase_with_identity(self):
+        ctxt = context.RequestContext('111',
+                                      '222',
+                                      roles=['Identity:Admin', 'weasel'])
+        self.assertEquals(ctxt.is_admin, True)
