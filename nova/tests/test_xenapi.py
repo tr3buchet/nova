@@ -29,7 +29,6 @@ from nova.compute import aggregate_states
 from nova.compute import instance_types
 from nova.compute import power_state
 from nova.compute import task_states
-from nova.compute import utils as compute_utils
 from nova.compute import vm_states
 from nova import context
 from nova import db
@@ -361,24 +360,28 @@ class XenAPIVMTestCase(test.TestCase):
         if check_injection:
             xenstore_data = self.vm['xenstore_data']
             self.assertEquals(xenstore_data['vm-data/hostname'], 'test')
-            key = 'vm-data/networking/DEADBEEF0000'
+            key = 'vm-data/networking/DEADBEEF0001'
             xenstore_value = xenstore_data[key]
             tcpip_data = ast.literal_eval(xenstore_value)
             self.assertEquals(tcpip_data,
-                              {'broadcast': '192.168.0.255',
-                               'dns': ['192.168.0.1'],
-                               'gateway': '192.168.0.1',
-                               'gateway_v6': 'dead:beef::1',
+                              {'broadcast': '192.168.1.255',
+                               'dns': ['192.168.1.3', '192.168.1.4'],
+                               'gateway': '192.168.1.1',
+                               'gateway_v6': 'fe80::def',
                                'ip6s': [{'enabled': '1',
-                                         'ip': 'dead:beef::dcad:beff:feef:0',
-                                               'netmask': '64'}],
+                                         'ip': '2001:db8:0:1::1',
+                                         'netmask': 64,
+                                         'gateway': 'fe80::def'}],
                                'ips': [{'enabled': '1',
-                                        'ip': '192.168.0.100',
-                                        'netmask': '255.255.255.0'}],
-                               'dhcp_server': '192.168.0.1',
-                               'label': 'fake',
-                               'mac': 'DE:AD:BE:EF:00:00',
-                               'rxtx_cap': 3})
+                                        'ip': '192.168.1.100',
+                                        'netmask': '255.255.255.0',
+                                        'gateway': '192.168.1.1'},
+                                       {'enabled': '1',
+                                        'ip': '192.168.1.101',
+                                        'netmask': '255.255.255.0',
+                                        'gateway': '192.168.1.1'}],
+                               'label': 'test1',
+                               'mac': 'DE:AD:BE:EF:00:01'})
 
     def check_vm_params_for_windows(self):
         self.assertEquals(self.vm['platform']['nx'], 'true')
@@ -452,27 +455,12 @@ class XenAPIVMTestCase(test.TestCase):
             instance = db.instance_create(self.context, instance_values)
         else:
             instance = db.instance_get(self.context, instance_id)
-        network_info = [({'bridge': 'fa0', 'id': 0,
-                          'injected': True,
-                          'cidr': '192.168.0.0/24',
-                          'cidr_v6': 'dead:beef::1/120',
-                          },
-                          {'broadcast': '192.168.0.255',
-                           'dns': ['192.168.0.1'],
-                           'gateway': '192.168.0.1',
-                           'gateway_v6': 'dead:beef::1',
-                           'ip6s': [{'enabled': '1',
-                                     'ip': 'dead:beef::dcad:beff:feef:0',
-                                           'netmask': '64'}],
-                           'ips': [{'enabled': '1',
-                                    'ip': '192.168.0.100',
-                                    'netmask': '255.255.255.0'}],
-                           'dhcp_server': '192.168.0.1',
-                           'label': 'fake',
-                           'mac': 'DE:AD:BE:EF:00:00',
-                           'rxtx_cap': 3})]
+
+        network_info = fake_network.fake_get_instance_nw_info(self.stubs,
+                                                              spectacular=True)
         if empty_dns:
-            network_info[0][1]['dns'] = []
+            # NOTE(tr3buchet): this is a terrible way to do this...
+            network_info[0]['network']['subnets'][0]['dns'] = []
 
         # admin_pass isn't part of the DB model, but it does get set as
         # an attribute for spawn to use
@@ -753,25 +741,8 @@ class XenAPIVMTestCase(test.TestCase):
             'os_type': 'linux',
             'architecture': 'x86-64'}
         instance = db.instance_create(self.context, instance_values)
-        network_info = [({'bridge': 'fa0', 'id': 0,
-                          'injected': False,
-                          'cidr': '192.168.0.0/24',
-                          'cidr_v6': 'dead:beef::1/120',
-                          },
-                          {'broadcast': '192.168.0.255',
-                           'dns': ['192.168.0.1'],
-                           'gateway': '192.168.0.1',
-                           'gateway_v6': 'dead:beef::1',
-                           'ip6s': [{'enabled': '1',
-                                     'ip': 'dead:beef::dcad:beff:feef:0',
-                                           'netmask': '64'}],
-                           'ips': [{'enabled': '1',
-                                    'ip': '192.168.0.100',
-                                    'netmask': '255.255.255.0'}],
-                           'dhcp_server': '192.168.0.1',
-                           'label': 'fake',
-                           'mac': 'DE:AD:BE:EF:00:00',
-                           'rxtx_cap': 3})]
+        network_info = fake_network.fake_get_instance_nw_info(self.stubs,
+                                                              spectacular=True)
         image_meta = {'id': glance_stubs.FakeGlance.IMAGE_VHD,
                       'disk_format': 'vhd'}
         if spawn:
@@ -1024,20 +995,8 @@ class XenAPIMigrateInstance(test.TestCase):
         stubs.stubout_session(self.stubs, stubs.FakeSessionForMigrationTests)
         stubs.stubout_loopingcall_start(self.stubs)
         conn = xenapi_conn.get_connection(False)
-        network_info = [({'bridge': 'fa0', 'id': 0, 'injected': False},
-                          {'broadcast': '192.168.0.255',
-                           'dns': ['192.168.0.1'],
-                           'gateway': '192.168.0.1',
-                           'gateway_v6': 'dead:beef::1',
-                           'ip6s': [{'enabled': '1',
-                                     'ip': 'dead:beef::dcad:beff:feef:0',
-                                     'netmask': '64'}],
-                           'ips': [{'enabled': '1',
-                                    'ip': '192.168.0.100',
-                                    'netmask': '255.255.255.0'}],
-                           'label': 'fake',
-                           'mac': 'DE:AD:BE:EF:00:00',
-                           'rxtx_cap': 3})]
+        network_info = fake_network.fake_get_instance_nw_info(self.stubs,
+                                                              spectacular=True)
         image_meta = {'id': instance.image_ref, 'disk_format': 'vhd'}
         conn.finish_migration(self.context, self.migration, instance,
                               dict(base_copy='hurr', cow='durr'),
@@ -1066,20 +1025,8 @@ class XenAPIMigrateInstance(test.TestCase):
         stubs.stubout_session(self.stubs, stubs.FakeSessionForMigrationTests)
         stubs.stubout_loopingcall_start(self.stubs)
         conn = xenapi_conn.get_connection(False)
-        network_info = [({'bridge': 'fa0', 'id': 0, 'injected': False},
-                          {'broadcast': '192.168.0.255',
-                           'dns': ['192.168.0.1'],
-                           'gateway': '192.168.0.1',
-                           'gateway_v6': 'dead:beef::1',
-                           'ip6s': [{'enabled': '1',
-                                     'ip': 'dead:beef::dcad:beff:feef:0',
-                                           'netmask': '64'}],
-                           'ips': [{'enabled': '1',
-                                    'ip': '192.168.0.100',
-                                    'netmask': '255.255.255.0'}],
-                           'label': 'fake',
-                           'mac': 'DE:AD:BE:EF:00:00',
-                           'rxtx_cap': 3})]
+        network_info = fake_network.fake_get_instance_nw_info(self.stubs,
+                                                              spectacular=True)
         image_meta = {'id': instance.image_ref, 'disk_format': 'vhd'}
         conn.finish_migration(self.context, self.migration, instance,
                               dict(base_copy='hurr', cow='durr'),
@@ -1102,20 +1049,8 @@ class XenAPIMigrateInstance(test.TestCase):
         stubs.stubout_session(self.stubs, stubs.FakeSessionForMigrationTests)
         stubs.stubout_loopingcall_start(self.stubs)
         conn = xenapi_conn.get_connection(False)
-        network_info = [({'bridge': 'fa0', 'id': 0, 'injected': False},
-                          {'broadcast': '192.168.0.255',
-                           'dns': ['192.168.0.1'],
-                           'gateway': '192.168.0.1',
-                           'gateway_v6': 'dead:beef::1',
-                           'ip6s': [{'enabled': '1',
-                                     'ip': 'dead:beef::dcad:beff:feef:0',
-                                           'netmask': '64'}],
-                           'ips': [{'enabled': '1',
-                                    'ip': '192.168.0.100',
-                                    'netmask': '255.255.255.0'}],
-                           'label': 'fake',
-                           'mac': 'DE:AD:BE:EF:00:00',
-                           'rxtx_cap': 3})]
+        network_info = fake_network.fake_get_instance_nw_info(self.stubs,
+                                                              spectacular=True)
         image_meta = {'id': instance.image_ref, 'disk_format': 'vhd'}
         conn.finish_migration(self.context, self.migration, instance,
                               dict(base_copy='hurr', cow='durr'),
@@ -1132,21 +1067,8 @@ class XenAPIMigrateInstance(test.TestCase):
         stubs.stubout_session(self.stubs, stubs.FakeSessionForMigrationTests)
         stubs.stubout_loopingcall_start(self.stubs)
         conn = xenapi_conn.get_connection(False)
-        network_info = [({'bridge': 'fa0', 'id': 0, 'injected': False},
-                          {'broadcast': '192.168.0.255',
-                           'dns': ['192.168.0.1'],
-                           'gateway': '192.168.0.1',
-                           'gateway_v6': 'dead:beef::1',
-                           'ip6s': [{'enabled': '1',
-                                     'ip': 'dead:beef::dcad:beff:feef:0',
-                                           'netmask': '64'}],
-                           'ips': [{'enabled': '1',
-                                    'ip': '192.168.0.100',
-                                    'netmask': '255.255.255.0'}],
-                           'label': 'fake',
-                           'mac': 'DE:AD:BE:EF:00:00',
-                           'rxtx_cap': 3})]
-
+        network_info = fake_network.fake_get_instance_nw_info(self.stubs,
+                                                              spectacular=True)
         # Resize instance would be determined by the compute call
         image_meta = {'id': instance.image_ref, 'disk_format': 'vhd'}
         conn.finish_migration(self.context, self.migration, instance,
@@ -1638,7 +1560,7 @@ class XenAPIDom0IptablesFirewallTestCase(test.TestCase):
         fake_network.stub_out_nw_api_get_instance_nw_info(self.stubs,
                                       lambda *a, **kw: network_model)
 
-        network_info = compute_utils.legacy_network_info(network_model)
+        network_info = network_model.legacy()
         self.fw.prepare_instance_filter(instance_ref, network_info)
         self.fw.apply_instance_filter(instance_ref, network_info)
 

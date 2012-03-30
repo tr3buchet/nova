@@ -20,7 +20,6 @@ from nova import db
 from nova import exception
 from nova import flags
 from nova import utils
-import nova.compute.utils
 from nova.network import manager as network_manager
 from nova.network.quantum import nova_ipam_lib
 from nova.tests import fake_network_cache_model
@@ -353,7 +352,7 @@ def fake_get_instance_nw_info(stubs, num_networks=1, ips_per_vif=2,
                 0, 0, 3, None)
     if spectacular:
         return nw_model
-    return nova.compute.utils.legacy_network_info(nw_model)
+    return nw_model.legacy()
 
 
 def stub_out_nw_api_get_instance_nw_info(stubs, func=None,
