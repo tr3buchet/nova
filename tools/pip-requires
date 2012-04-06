@@ -25,3 +25,4 @@ iso8601>=0.1.4
 httplib2
 setuptools_git>=0.4
 python-quantumclient>=0.1,<0.2
+xattr
