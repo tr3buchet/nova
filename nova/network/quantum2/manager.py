@@ -496,17 +496,11 @@ class QuantumManager(manager.SchedulerDependentManager):
             vifs = self.m_conn.get_allocated_networks(instance_id)
             nw_info = self._vifs_to_model(vifs, skip_broken_vifs=True)
             nw_info = self._order_nw_info_by_label(nw_info)
-        except Exception, e:
-            # NOTE(tr3buchet): I don't like generic exceptions, but a lot of
-            #                  places call this and then loop through
-            #                  what it returns. Instead of catching
-            #                  RemoteError all over the place, catch here and
-            #                  all the 'nw_info failed' log messages will be
-            #                  in one place, and return empty nw_info
-            nw_info = model.NetworkInfo()
-            msg = _('Failed to get nw_info!!! for instance |%(instance_id)s| '
-                    'on startup, |%(e)s|') % locals()
-            LOG.exception(msg)
+        except Exception as e:
+            with excutils.save_and_reraise_exception():
+                msg = _('Failed to get nw_info!!! for instance '
+                        '|%(instance_id)s|, |%(e)s|') % locals()
+                LOG.exception(msg)
         return nw_info
 
     def get_network(self, context, network_uuid):
