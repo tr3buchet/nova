@@ -398,8 +398,6 @@ class API(base.Base):
         kernel_id, ramdisk_id = self._handle_kernel_and_ramdisk(
                 context, kernel_id, ramdisk_id, image, image_service)
 
-        self.security_group_api.ensure_default(context)
-
         if key_data is None and key_name:
             key_pair = self.db.key_pair_get(context, context.user_id, key_name)
             key_data = key_pair['public_key']
@@ -594,6 +592,8 @@ class API(base.Base):
         This is called by the scheduler after a location for the
         instance has been determined.
         """
+        self.ensure_default_security_group(context)
+
         elevated = context.elevated()
         if security_group is None:
             security_group = ['default']
