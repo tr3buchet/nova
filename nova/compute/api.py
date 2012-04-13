@@ -1919,6 +1919,14 @@ class API(base.Base):
 
         return {'url': connect_info['access_url']}
 
+    def get_vnc_connect_info(self, context, instance, console_type):
+        """Used in a child cell to get console info."""
+        if not instance['host']:
+            raise exception.InstanceNotReady(instance=instance)
+        connect_info = self.compute_rpcapi.get_vnc_console(context,
+                instance=instance, console_type=console_type)
+        return connect_info
+
     @wrap_check_policy
     def get_console_output(self, context, instance, tail_length=None):
         """Get console output for an instance."""
