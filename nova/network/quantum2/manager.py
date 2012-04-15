@@ -58,6 +58,9 @@ quantum2_opts = [
     cfg.ListOpt('network_order',
                 default=['public', 'private', '.*'],
                 help='Ordered list of network labels, using regex syntax'),
+    cfg.BoolOpt('quantum_cache_tenant_networks',
+                default=True,
+                help='Whether or not to cache quantum tenant networks'),
     ]
 
 FLAGS.register_opts(quantum2_opts)
@@ -100,6 +103,7 @@ class QuantumManager(manager.SchedulerDependentManager):
 
         self.q_conn = quantum_connection.QuantumClientConnection()
         self.m_conn = melange_connection.MelangeConnection()
+        self.net_info_cache = {}
 
         super(QuantumManager, self).__init__(service_name='network',
                                              *args, **kwargs)
@@ -186,19 +190,35 @@ class QuantumManager(manager.SchedulerDependentManager):
     # FIXME(jkoelker) Quantum client needs to be updated, until Folsom
     #                is open do this here.
     def _get_quantum_tenant_nets(self, tenant_id):
+        if tenant_id in self.net_info_cache:
+            return self.net_info_cache[tenant_id]
+
         client = self.q_conn.client
         # NOTE(jkoelker) Really?
         (format, tenant) = (client.format, client.tenant)
         client.format = 'json'
         client.tenant = tenant_id
 
-        url = '/networks/detail'
+        url = '/networks'
         res = client.do_request("GET", url)
+
+        nets = res['networks']
+        result = []
+        for net in nets:
+            net_id = net['id']
+            url = '/networks/%s' % net_id
+            res = client.do_request('GET', url)
+            result.append({'id': net_id, 'name': res['network']['name']})
 
         # NOTE(jkoelker) Yes, really.
         client.format = format
         client.tenant = tenant
-        return res['networks']
+        # FIXME(comstud): Hack to cache this.  We'll need to make this
+        # better, because it'll leak memory over time as-is.  Should
+        # convert this to use nova/common/memorycache.py?
+        if FLAGS.quantum_cache_tenant_networks:
+            self.net_info_cache[tenant_id] = result
+        return result
 
     def _normalize_network(self, network):
         # NOTE(jkoelker) We don't want to expose out a bunch of melange
