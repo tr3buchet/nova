@@ -220,6 +220,14 @@ def usage_from_instance(context, instance_ref, network_info,
         except exception.NotFound:
             system_metadata = {}
 
+    # Provide base_image_ref so RAX knows what image the instance
+    # was built from initially
+    base_image_ref = system_metadata.get('image_base_image_ref')
+    if base_image_ref:
+        base_image_ref_url = utils.generate_image_url(base_image_ref)
+    else:
+        base_image_ref_url = ''
+
     usage_info = dict(
         # Owner properties
         tenant_id=instance_ref['project_id'],
@@ -262,6 +270,11 @@ def usage_from_instance(context, instance_ref, network_info,
         os_type=instance_ref['os_type'],
         kernel_id=instance_ref['kernel_id'],
         ramdisk_id=instance_ref['ramdisk_id'],
+
+        # FIXME(comstud): Remove this when we're sure that billing is
+        # not using it (original_image_ref)
+        original_image_ref_url=base_image_ref_url,
+        base_image_ref_url=base_image_ref_url,
 
         # Status properties
         state=instance_ref['vm_state'],

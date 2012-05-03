@@ -498,10 +498,11 @@ class ComputeTestCase(BaseTestCase):
         instance = self._create_fake_instance()
         instance_uuid = instance['uuid']
         image_ref = instance['image_ref']
-
+        sys_metadata = db.instance_system_metadata_get(self.context,
+                        instance_uuid)
         self.compute.run_instance(self.context, instance_uuid)
         self.compute.rebuild_instance(self.context, instance_uuid,
-                image_ref, image_ref)
+                image_ref, sys_metadata)
         self.compute.terminate_instance(self.context, instance_uuid)
 
     def test_rebuild_launch_time(self):
@@ -1091,31 +1092,49 @@ class ComputeTestCase(BaseTestCase):
 
         test_notifier.NOTIFICATIONS = []
         instance = db.instance_get_by_uuid(self.context, inst_ref['uuid'])
-
+        db.instance_system_metadata_update(self.context, inst_ref['uuid'],
+                {'image_kernel_id': 'old-data',
+                 'image_ramdisk_id': 'old_data',
+                 'image_base_image_ref': 'base_image_ref1',
+                },
+                True)
+        orig_sys_metadata = db.instance_system_metadata_get(self.context,
+                                inst_ref['uuid'])
+        base_image_ref = orig_sys_metadata.get('image_base_image_ref')
+        new_base_image_ref = 'base_image_ref2'
         image_ref = instance["image_ref"]
         new_image_ref = image_ref + '-new_image_ref'
         db.instance_update(self.context, inst_ref['uuid'],
-                           {'image_ref': new_image_ref})
+                {'image_ref': new_image_ref})
+        db.instance_system_metadata_update(self.context, inst_ref['uuid'],
+                {'image_base_image_ref': new_base_image_ref}, False)
 
         password = "new_password"
 
         self.compute._rebuild_instance(self.context, inst_ref['uuid'],
-                image_ref, new_image_ref, dict(new_pass=password))
+                image_ref, new_image_ref, orig_sys_metadata,
+                dict(new_pass=password))
 
         instance = db.instance_get_by_uuid(self.context, inst_ref['uuid'])
 
         image_ref_url = utils.generate_image_url(image_ref)
         new_image_ref_url = utils.generate_image_url(new_image_ref)
+        base_image_ref_url = utils.generate_image_url(base_image_ref)
+        new_base_image_ref_url = utils.generate_image_url(new_base_image_ref)
 
         self.assertEquals(len(test_notifier.NOTIFICATIONS), 3)
         msg = test_notifier.NOTIFICATIONS[0]
         self.assertEquals(msg['event_type'],
                           'compute.instance.exists')
         self.assertEquals(msg['payload']['image_ref_url'], image_ref_url)
+        self.assertEquals(msg['payload']['base_image_ref_url'],
+                base_image_ref_url)
         msg = test_notifier.NOTIFICATIONS[1]
         self.assertEquals(msg['event_type'],
                           'compute.instance.rebuild.start')
         self.assertEquals(msg['payload']['image_ref_url'], new_image_ref_url)
+        self.assertEquals(msg['payload']['base_image_ref_url'],
+                new_base_image_ref_url)
         msg = test_notifier.NOTIFICATIONS[2]
         self.assertEquals(msg['event_type'],
                           'compute.instance.rebuild.end')
@@ -1132,6 +1151,8 @@ class ComputeTestCase(BaseTestCase):
         self.assertTrue('launched_at' in payload)
         self.assertEqual(payload['launched_at'], str(cur_time))
         self.assertEquals(payload['image_ref_url'], new_image_ref_url)
+        self.assertEquals(payload['base_image_ref_url'],
+                new_base_image_ref_url)
         self.compute.terminate_instance(self.context, inst_ref['uuid'])
 
     def test_finish_resize_instance_notification(self):
