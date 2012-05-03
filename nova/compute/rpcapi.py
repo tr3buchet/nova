@@ -226,11 +226,12 @@ class ComputeAPI(nova.openstack.common.rpc.proxy.RpcProxy):
                 topic=_compute_topic(self.topic, ctxt, None, instance))
 
     def rebuild_instance(self, ctxt, instance, new_pass, injected_files,
-            image_ref, orig_image_ref):
+            image_ref, orig_image_ref, orig_base_image_ref):
         self.cast(ctxt, self.make_msg('rebuild_instance',
                 instance_uuid=instance['uuid'], new_pass=new_pass,
                 injected_files=injected_files, image_ref=image_ref,
-                orig_image_ref=orig_image_ref),
+                orig_image_ref=orig_image_ref,
+                orig_base_image_ref=orig_base_image_ref),
                 topic=_compute_topic(self.topic, ctxt, None, instance))
 
     def refresh_provider_fw_rules(self, ctxt, host):

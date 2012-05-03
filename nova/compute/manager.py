@@ -847,7 +847,7 @@ class ComputeManager(manager.SchedulerDependentManager):
     @checks_instance_lock
     @wrap_instance_fault
     def rebuild_instance(self, context, instance_uuid, orig_image_ref,
-            image_ref, **kwargs):
+            image_ref, orig_base_image_ref=None, **kwargs):
         """Destroy and re-make this instance.
 
         A 'rebuild' effectively purges all existing data from the system and
@@ -862,7 +862,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         """
         try:
             self._rebuild_instance(context, instance_uuid, orig_image_ref,
-                    image_ref, kwargs)
+                    image_ref, orig_base_image_ref, kwargs)
         except exception.ImageNotFound:
             LOG.error(_('Cannot rebuild instance because the given image does '
                         'not exist.'),
@@ -874,7 +874,7 @@ class ComputeManager(manager.SchedulerDependentManager):
             self._set_instance_error_state(context, instance_uuid)
 
     def _rebuild_instance(self, context, instance_uuid, orig_image_ref,
-            image_ref, kwargs):
+            image_ref, orig_base_image_ref, kwargs):
         context = context.elevated()
 
         LOG.audit(_("Rebuilding instance"), context=context,
@@ -894,8 +894,16 @@ class ComputeManager(manager.SchedulerDependentManager):
         # to point to the new one... we have to override it.
         orig_image_ref_url = utils.generate_image_url(orig_image_ref)
         extra_usage_info = {'image_ref_url': orig_image_ref_url}
+
+        # Rackspace specific code for base_image_ref.  We need to
+        # send the original...
+        system_metadata = self.db.instance_system_metadata_get(context,
+                instance['uuid'])
+        system_metadata['image_base_image_ref'] = orig_base_image_ref
+
         compute_utils.notify_usage_exists(context, instance,
-                current_period=True, extra_usage_info=extra_usage_info)
+                current_period=True, system_metadata=system_metadata,
+                extra_usage_info=extra_usage_info)
 
         # This message should contain the new image_ref
         self._notify_about_instance_usage(context, instance,
