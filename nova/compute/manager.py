@@ -917,7 +917,13 @@ class ComputeManager(manager.SchedulerDependentManager):
         LOG.audit(_("Rebuilding instance"), context=context,
                   instance_uuid=instance_uuid)
 
-        instance = self.db.instance_get_by_uuid(context, instance_uuid)
+        # This is a grievous hack to make usage happy for the moment
+        # We will remove this when their system is fixed. (mdragon)
+
+        # instance = self.db.instance_get_by_uuid(context, instance_uuid)
+        instance = self._instance_update(context,
+                instance_uuid, launched_at=timeutils.utcnow())
+        # Endhack.
 
         # This instance.exists message should contain the original
         # image_ref, not the new one.  Since the DB has been updated
@@ -1334,8 +1340,15 @@ class ComputeManager(manager.SchedulerDependentManager):
 
         """
         migration_ref = self.db.migration_get(context, migration_id)
-        instance_ref = self.db.instance_get_by_uuid(context,
-                migration_ref.instance_uuid)
+
+        # This is a grievous hack to make usage happy for the moment
+        # We will remove this when their system is fixed. (mdragon)
+
+        # instance_ref = self.db.instance_get_by_uuid(context,
+        #         migration_ref.instance_uuid)
+        instance_ref = self._instance_update(context,
+                migration_ref.instance_uuid, launched_at=timeutils.utcnow())
+        # Endhack.
 
         # NOTE(comstud): A revert_resize is essentially a resize back to
         # the old size, so we need to send a usage event here.
@@ -1447,7 +1460,13 @@ class ComputeManager(manager.SchedulerDependentManager):
         """
         context = context.elevated()
 
-        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
+        # This is a grievous hack to make usage happy for the moment
+        # We will remove this when their system is fixed. (mdragon)
+        # instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
+
+        instance_ref = self._instance_update(context,
+                instance_uuid, launched_at=timeutils.utcnow())
+        # Endhack.
 
         compute_utils.notify_usage_exists(
                 context, instance_ref, current_period=True)
