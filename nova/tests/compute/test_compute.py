@@ -1755,6 +1755,94 @@ class ComputeTestCase(BaseTestCase):
         self.compute.terminate_instance(self.context,
                 instance=jsonutils.to_primitive(inst_ref))
 
+    def test_rebuild_instance_notification_pass_info(self):
+        old_time = datetime.datetime(2012, 4, 1)
+        cur_time = datetime.datetime(2012, 12, 21, 12, 21)
+        timeutils.set_time_override(old_time)
+        inst_ref = jsonutils.to_primitive(self._create_fake_instance())
+        self.compute.run_instance(self.context, instance=inst_ref)
+        timeutils.set_time_override(cur_time)
+
+        self.context.roles.append('rack_connect')
+
+        def _fake_get_password_info(*_args):
+            return [{'target': 'rack_connect', 'key_version': 123, 'value':
+            'fake_public_key'}]
+        self.stubs.Set(self.compute, '_get_password_info',
+                       _fake_get_password_info)
+
+        test_notifier.NOTIFICATIONS = []
+        instance = db.instance_get_by_uuid(self.context, inst_ref['uuid'])
+        db.instance_system_metadata_update(self.context, inst_ref['uuid'],
+                {'image_kernel_id': 'old-data',
+                 'image_ramdisk_id': 'old_data',
+                 'image_base_image_ref': 'base_image_ref1',
+                },
+                True)
+        orig_sys_metadata = db.instance_system_metadata_get(self.context,
+                                inst_ref['uuid'])
+        base_image_ref = orig_sys_metadata.get('image_base_image_ref')
+        new_base_image_ref = 'base_image_ref2'
+        image_ref = instance["image_ref"]
+        new_image_ref = image_ref + '-new_image_ref'
+        db.instance_update(self.context, inst_ref['uuid'],
+                {'image_ref': new_image_ref})
+        db.instance_system_metadata_update(self.context, inst_ref['uuid'],
+                {'image_base_image_ref': new_base_image_ref}, False)
+
+        password = "new_password"
+
+        instance = db.instance_get_by_uuid(self.context, inst_ref['uuid'])
+
+        db.instance_update(self.context, instance['uuid'],
+                {"task_state": task_states.REBUILDING})
+        self.compute.rebuild_instance(self.context.elevated(),
+                jsonutils.to_primitive(instance),
+                image_ref, new_image_ref,
+                injected_files=[],
+                orig_sys_metadata=orig_sys_metadata,
+                new_pass=password)
+
+        instance = db.instance_get_by_uuid(self.context, inst_ref['uuid'])
+
+        image_ref_url = utils.generate_image_url(image_ref)
+        new_image_ref_url = utils.generate_image_url(new_image_ref)
+
+        self.assertEquals(len(test_notifier.NOTIFICATIONS), 3)
+        msg = test_notifier.NOTIFICATIONS[0]
+        self.assertEquals(msg['event_type'],
+                          'compute.instance.exists')
+        self.assertEquals(msg['payload']['image_ref_url'], image_ref_url)
+        msg = test_notifier.NOTIFICATIONS[1]
+        self.assertEquals(msg['event_type'],
+                          'compute.instance.rebuild.start')
+        self.assertEquals(msg['payload']['image_ref_url'], new_image_ref_url)
+        self.assertEquals(msg['payload']['image_name'], 'fake_name')
+        msg = test_notifier.NOTIFICATIONS[2]
+        self.assertEquals(msg['event_type'],
+                          'compute.instance.rebuild.end')
+        self.assertEquals(msg['priority'], 'INFO')
+        payload = msg['payload']
+        self.assertEquals(payload['image_name'], 'fake_name')
+        self.assertEquals(payload['tenant_id'], self.project_id)
+        self.assertEquals(payload['user_id'], self.user_id)
+        self.assertEquals(payload['instance_id'], inst_ref['uuid'])
+        self.assertEquals(payload['instance_type'], 'm1.tiny')
+        type_id = instance_types.get_instance_type_by_name('m1.tiny')['id']
+        self.assertEquals(str(payload['instance_type_id']), str(type_id))
+        self.assertTrue('display_name' in payload)
+        self.assertTrue('created_at' in payload)
+        self.assertTrue('launched_at' in payload)
+        self.assertEqual(payload['launched_at'], str(cur_time))
+        self.assertEquals(payload['image_ref_url'], new_image_ref_url)
+        self.compute.terminate_instance(self.context,
+                instance=jsonutils.to_primitive(inst_ref))
+        self.assertTrue('password_info' in payload)
+        self.assertEqual(len(payload['password_info']), 1)
+        self.assertEqual('rack_connect', payload['password_info'][0]['target'])
+        self.assertEqual('fake_public_key',
+                         payload['password_info'][0]['value'])
+
     def test_finish_resize_instance_notification(self):
         """Ensure notifications on instance migrate/resize"""
         old_time = datetime.datetime(2012, 4, 1)

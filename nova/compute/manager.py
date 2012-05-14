@@ -539,6 +539,40 @@ class ComputeManager(manager.SchedulerDependentManager):
             'block_device_mapping': block_device_mapping
         }
 
+    def _get_password_info(self, context, admin_password):
+        """Create encrypted password info that will be passed to specified
+        services via notifications.
+
+        The admin_password is encrypted using a public key supplied for each
+        service. Since the keys for a service may need to change, a version
+        number is also passed so the receiver knows which private key to use to
+        decrypt.
+        """
+        password_info = []
+        for service in FLAGS.password_aware_services:
+            target, key_version, public_key_filename = service.split(':')
+
+            if target not in context.roles:
+                continue
+
+            with open(public_key_filename, 'r') as f:
+                public_key = f.read()
+
+            # Create byte-stream
+            plain_text = admin_password.encode('utf8')
+
+            # Encrypt using service's public key
+            encrypted_password = utils.encrypt_rsa(
+                public_key, plain_text)
+
+            # Base64 encode to make results transport friendly
+            encrypted_password = encrypted_password.encode('base64')
+
+            password_info.append(dict(target=target,
+                                      key_version=key_version,
+                                      value=encrypted_password))
+        return password_info
+
     def _run_instance(self, context, request_spec,
                       filter_properties, requested_networks, injected_files,
                       admin_password, is_first_time, instance):
@@ -550,6 +584,11 @@ class ComputeManager(manager.SchedulerDependentManager):
             image_meta = self._check_image_size(context, instance)
             extra_usage_info = {"image_name": image_meta['name']}
             self._start_building(context, instance)
+            if admin_password:
+                password_info = self._get_password_info(
+                        context, admin_password)
+                extra_usage_info['password_info'] = password_info
+
             self._notify_about_instance_usage(
                     context, instance, "create.start",
                     extra_usage_info=extra_usage_info)
@@ -1175,6 +1214,14 @@ class ComputeManager(manager.SchedulerDependentManager):
 
             # This message should contain the new image_ref
             extra_usage_info = {'image_name': image_meta['name']}
+
+            admin_pass = new_pass or utils.generate_password(
+                    FLAGS.password_length)
+
+            # Get encrypted password for notifications
+            password_info = self._get_password_info(context, admin_pass)
+            extra_usage_info['password_info'] = password_info
+
             self._notify_about_instance_usage(context, instance,
                     "rebuild.start", extra_usage_info=extra_usage_info)
 
@@ -1209,8 +1256,11 @@ class ComputeManager(manager.SchedulerDependentManager):
             # the db
             admin_password = new_pass
 
+            # Set the new password
+            instance['admin_pass'] = admin_pass
+
             self.driver.spawn(context, instance, image_meta,
-                              [], admin_password,
+                              [], admin_pass,
                               self._legacy_nw_info(network_info),
                               device_info)
 

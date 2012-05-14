@@ -390,6 +390,12 @@ global_opts = [
                    'include: libvirt.LibvirtDriver, xenapi.XenAPIDriver, '
                    'fake.FakeDriver, baremetal.BareMetalDriver, '
                    'vmwareapi.VMWareESXDriver'),
+    cfg.ListOpt('password_aware_services',
+                default=[],
+                help='Public keys for services that will receive access to the'
+                     ' instance root password. Format is:'
+                     ' <target>:<key_version>:<path-to-public-key-file> ('
+                     ' Ex. "rack_connect:123:/tmp/rack_connect_123.pub")'),
 ]
 
 CONF.register_opts(global_opts)
