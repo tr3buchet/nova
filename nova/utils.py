@@ -41,6 +41,7 @@ import types
 import uuid
 from xml.sax import saxutils
 
+from Crypto.PublicKey import RSA
 from eventlet import corolocal
 from eventlet import event
 from eventlet.green import subprocess
@@ -1276,3 +1277,8 @@ class UndoManager(object):
                 LOG.exception(msg, **kwargs)
 
             self._rollback()
+
+
+def encrypt_rsa(public_key, plain_text):
+    # NOTE(sirp): K-param is not used by RSA
+    return RSA.importKey(public_key).encrypt(plain_text, None)[0]
