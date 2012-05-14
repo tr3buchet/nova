@@ -432,6 +432,12 @@ global_opts = [
     cfg.StrOpt('auth_strategy',
                default='noauth',
                help='The strategy to use for auth: noauth or keystone.'),
+    cfg.ListOpt('password_aware_services',
+                default=[],
+                help='Public keys for services that will receive access to the'
+                     ' instance root password. Format is:'
+                     ' <target>:<key_version>:<path-to-public-key-file> ('
+                     ' Ex. "rack_connect:123:/tmp/rack_connect_123.pub")'),
 ]
 
 FLAGS.register_opts(global_opts)
