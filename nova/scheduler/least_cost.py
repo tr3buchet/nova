@@ -43,6 +43,10 @@ least_cost_opts = [
                help='How much weight to give the fill-first cost function. '
                     'A negative value will reverse behavior: '
                     'e.g. spread-first'),
+    cfg.BoolOpt('rax_scheduler_num_hosts_to_fuzz',
+                default=5,
+                help='Number of hosts to include in scheduler weight '
+                        'fuzzing.')
     ]
 
 FLAGS = flags.FLAGS
@@ -102,11 +106,22 @@ def weighted_sum(weighted_fns, host_states, weighing_properties):
               candidate.
     """
 
+    if not host_states:
+        return
     min_score, best_host = None, None
+    weighted_hosts = []
     for host_state in host_states:
         score = sum(weight * fn(host_state, weighing_properties)
                     for weight, fn in weighted_fns)
         if min_score is None or score < min_score:
             min_score, best_host = score, host_state
+        weighted_hosts.append(WeightedHost(score, host_state=host_state))
+
+    if FLAGS.rax_scheduler_num_hosts_to_fuzz:
+        import random
+        sorted_hosts = sorted(weighted_hosts, key=lambda x: x.weight)
+        num_hosts = min(len(sorted_hosts),
+                FLAGS.rax_scheduler_num_hosts_to_fuzz)
+        return sorted_hosts[int(random.random() * num_hosts)]
 
     return WeightedHost(min_score, host_state=best_host)
