@@ -1280,5 +1280,10 @@ class UndoManager(object):
 
 
 def encrypt_rsa(public_key, plain_text):
+    if 'importKey' not in dir(RSA):
+        # PyCrypto2.1 compat
+        import nova.compat.pycrypto21
+        nova.compat.pycrypto21.monkey_patch()
+
     # NOTE(sirp): K-param is not used by RSA
     return RSA.importKey(public_key).encrypt(plain_text, None)[0]
