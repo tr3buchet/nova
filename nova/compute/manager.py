@@ -452,7 +452,7 @@ class ComputeManager(manager.SchedulerDependentManager):
             'block_device_mapping': block_device_mapping
         }
 
-    def _get_password_info(self, admin_password):
+    def _get_password_info(self, context, admin_password):
         """Create encrypted password info that will be passed to specified
         services via notifications.
 
@@ -464,6 +464,9 @@ class ComputeManager(manager.SchedulerDependentManager):
         password_info = []
         for service in FLAGS.password_aware_services:
             target, key_version, public_key_filename = service.split(':')
+
+            if target not in context.roles:
+                continue
 
             with open(public_key_filename, 'r') as f:
                 public_key = f.read()
@@ -497,9 +500,12 @@ class ComputeManager(manager.SchedulerDependentManager):
             image_meta = self._check_image_size(context, instance)
             self._start_building(context, instance)
             extra_usage_info = {}
+
             if admin_password:
-                password_info = self._get_password_info(admin_password)
+                password_info = self._get_password_info(
+                        context, admin_password)
                 extra_usage_info['password_info'] = password_info
+
             self._notify_about_instance_usage(
                     context, instance, "create.start",
                     extra_usage_info=extra_usage_info)
