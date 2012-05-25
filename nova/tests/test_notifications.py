@@ -75,7 +75,13 @@ class NotificationsTestCase(test.TestCase):
         inst['ephemeral_gb'] = 0
         if params:
             inst.update(params)
-        return db.instance_create(self.context, inst)
+        inst = db.instance_create(self.context, inst)
+        # NOTE(comstud): While it seems unnecessary to grab a new
+        # instance_ref here instead of using the one created, it is
+        # necessary so we don't have lazy joins later (for 'info_cache'
+        # in the notifications in particular) that could fail due to the
+        # session not being valid anymore.
+        return db.instance_get_by_uuid(self.context, inst['uuid'])
 
     def test_notif_disabled(self):
 
