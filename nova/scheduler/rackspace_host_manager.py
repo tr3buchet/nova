@@ -1,17 +1,5 @@
 # Copyright (c) 2011 Rackspace Hosting
 # All Rights Reserved.
-#
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
-#
-#         http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
 
 """
 Rackspace specific host manager.
@@ -20,11 +8,17 @@ Rackspace specific host manager.
 from nova.compute import task_states
 from nova.compute import vm_states
 from nova import flags
-from nova import log as logging
+from nova.openstack.common import cfg
 from nova.scheduler import host_manager
-from nova import utils
+
+rax_host_manager_opts = [
+    cfg.IntOpt('scheduler_spare_host_percentage',
+            default=10,
+            help='Percentage of hosts that should be reserved as spares')
+    ]
 
 FLAGS = flags.FLAGS
+FLAGS.register_opts(rax_host_manager_opts)
 
 
 class RackspaceHostState(host_manager.HostState):
@@ -94,3 +88,29 @@ class RackspaceHostState(host_manager.HostState):
 
 class RackspaceHostManager(host_manager.HostManager):
     host_state_cls = RackspaceHostState
+
+    def filter_hosts(self, hosts, filter_properties, filters=None):
+        # 'hosts' is an iterator.. so we can only consume it once, but we
+        # need to get the total number of hosts below.  Turn it back into
+        # a list..
+        hosts = [host for host in hosts]
+        filtered_hosts = super(RackspaceHostManager, self).filter_hosts(
+                iter(hosts), filter_properties, filters=filters)
+        # Do some fudging for reserving some empty hosts for 30G instances
+        empty_hosts = [x for x in filtered_hosts if not x.num_instances]
+        num_empty_hosts = len(empty_hosts)
+        if len(filtered_hosts) == num_empty_hosts:
+            # Only empty_hosts match the filter, so return them
+            return filtered_hosts
+        # Otherwise, make sure we're reserving a certain amount of hosts
+        pct_spare = FLAGS.scheduler_spare_host_percentage
+        if not pct_spare:
+            # Feature disabled
+            return filtered_hosts
+        total_hosts = len(hosts)
+        target_spares = total_hosts / pct_spare
+        if target_spares > num_empty_hosts:
+            target_spares = num_empty_hosts
+        for i in xrange(target_spares):
+            filtered_hosts.remove(empty_hosts[i])
+        return filtered_hosts
