@@ -137,11 +137,15 @@ class GlanceImageService(object):
     def _call_retry(self, context, name, *args, **kwargs):
         """Retry call to glance server if there is a connection error.
         Suitable only for idempotent calls."""
+
+        retry_excs = (glance_exception.ClientConnectionError,
+                glance_exception.ServiceUnavailable)
+
         for i in xrange(FLAGS.glance_num_retries + 1):
             client = self._get_client(context)
             try:
                 return getattr(client, name)(*args, **kwargs)
-            except glance_exception.ClientConnectionError as e:
+            except retry_excs:
                 LOG.exception(_('Connection error contacting glance'
                                 ' server, retrying'))
 
