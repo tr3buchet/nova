@@ -64,6 +64,34 @@ _MEDIA_TYPE_MAP = {
 class Request(webob.Request):
     """Add some OpenStack API-specific logic to the base webob.Request."""
 
+    def __init__(self, *args, **kwargs):
+        super(Request, self).__init__(*args, **kwargs)
+        self._extension_data = {'db_instances': {}}
+
+    def store_db_instances(self, instances):
+        """
+        Allow API methods to store instances from a DB query to be
+        used by API extensions
+        """
+        db_instances = self._extension_data['db_instances']
+        for instance in instances:
+            db_instances[instance['uuid']] = instance
+
+    def store_db_instance(self, instance):
+        """
+        Allow API methods to store an instance from a DB query to be
+        used by API extensions
+        """
+        self.store_db_instances([instance])
+
+    def get_db_instances(self):
+        """Allow an API extension to get previously stored instances"""
+        return self._extension_data['db_instances']
+
+    def get_db_instance(self, instance_uuid):
+        """Allow an API extension to get a previously stored instance"""
+        return self._extension_data['db_instances'].get(instance_uuid)
+
     def best_match_content_type(self):
         """Determine the requested response content-type."""
         if 'nova.best_content_type' not in self.environ:

@@ -77,16 +77,15 @@ class ServerBandwidthController(wsgi.Controller):
 
         return (instance_uuid, macs)
 
-    def _get_used_bw(self, context, servers):
+    def _get_used_bw(self, context, req, servers):
         # end of last period == start of current one
         start_time = utils.last_completed_audit_period()[1]
         uuids = [server["id"] for server in servers]
-        db_instances = db.instance_get_all_by_filters(context, {'uuid': uuids})
-
+        db_instances = req.get_db_instances()
         # for each uuid, get a list of the macs to report on:
         # each value is a dict mapping mac=>bw usage info
         instance_to_macs = dict([self._get_macs(context, db_instance)
-                                 for db_instance in db_instances])
+                for db_instance in db_instances.itervalues()])
 
         # for each uuid and mac of interest, gather cached bw usage info:
         bw_interfaces = db.bw_usage_get_by_uuids(context, uuids, start_time)
@@ -96,7 +95,7 @@ class ServerBandwidthController(wsgi.Controller):
             uuid = bw_interface['uuid']
             mac = bw_interface['mac']
 
-            if mac not in instance_to_macs[uuid]:
+            if mac not in instance_to_macs.get(uuid, {}):
                 # bw info was recorded for an interface that's no longer
                 # present or configured:
                 continue
@@ -129,7 +128,7 @@ class ServerBandwidthController(wsgi.Controller):
             context = req.environ["nova.context"]
             resp_obj.attach(xml=ServerBandwidthTemplate())
             server = resp_obj.obj["server"]
-            self._get_used_bw(context, [server])
+            self._get_used_bw(context, req, [server])
 
     @wsgi.extends
     def show(self, req, resp_obj, id):
@@ -141,7 +140,7 @@ class ServerBandwidthController(wsgi.Controller):
             context = req.environ["nova.context"]
             resp_obj.attach(xml=ServersBandwidthTemplate())
             servers = resp_obj.obj["servers"]
-            self._get_used_bw(context, servers)
+            self._get_used_bw(context, req, servers)
 
 
 class Server_bandwidth(extensions.ExtensionDescriptor):
