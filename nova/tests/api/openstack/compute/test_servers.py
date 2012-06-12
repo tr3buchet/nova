@@ -1454,6 +1454,12 @@ class ServersControllerCreateTest(test.TestCase):
             """
             return self.instance_cache_by_id[instance_id]
 
+        def instance_get_by_uuid(context, instance_uuid):
+            """Stub for compute/api create() pulling in instance after
+            scheduling
+            """
+            return self.instance_by_uuid_cache[instance_uuid]
+
         def rpc_call_wrapper(context, topic, msg, timeout=None):
             """Stub out the scheduler creating the instance entry"""
             if (topic == FLAGS.scheduler_topic and
@@ -1495,6 +1501,8 @@ class ServersControllerCreateTest(test.TestCase):
         self.stubs.Set(nova.db, 'instance_get', instance_get)
         self.stubs.Set(nova.openstack.common.rpc, 'cast', fake_method)
         self.stubs.Set(nova.openstack.common.rpc, 'call', rpc_call_wrapper)
+        self.stubs.Set(nova.db, 'instance_get_by_uuid',
+                instance_get_by_uuid)
         self.stubs.Set(nova.db, 'instance_update_and_get_original',
                 server_update)
         self.stubs.Set(nova.openstack.common.rpc, 'queue_get_for',

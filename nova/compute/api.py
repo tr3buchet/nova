@@ -616,6 +616,9 @@ class API(base.Base):
 
         base_options.setdefault('launch_index', 0)
         instance = self.db.instance_create(context, base_options)
+        # Need to reload this, so we get some DB joins.. :-/
+        instance = self.db.instance_get_by_uuid(context,
+                instance['uuid'])
 
         # Commit the reservations
         if reservations:
