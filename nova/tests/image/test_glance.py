@@ -18,6 +18,7 @@
 
 import datetime
 import random
+import sys
 import time
 
 import glanceclient.exc
@@ -25,6 +26,7 @@ import glanceclient.exc
 from nova import context
 from nova import exception
 from nova.image import glance
+from nova.openstack.common import timeutils
 from nova import test
 from nova.tests.api.openstack import fakes
 from nova.tests.glance import stubs as glance_stubs
@@ -103,6 +105,7 @@ class TestGlanceImageService(test.TestCase):
         client = glance_stubs.StubGlanceClient()
         self.service = self._create_image_service(client)
         self.context = context.RequestContext('fake', 'fake', auth_token=True)
+        glance.GlanceImageMetaDataCache.clear_cache()
 
     def _create_image_service(self, client):
         def _fake_create_glance_client(context, host, port, use_ssl, version):
@@ -533,6 +536,136 @@ class TestGlanceImageService(test.TestCase):
         self.assertEquals(service._client.host,
                 'something-less-likely')
 
+    def test_caching_with_show_on_public_image(self):
+        self.flags(glance_cache_metadata=True)
+        fixture = self._make_fixture(name='image1', is_public=True)
+        image_id = self.service.create(self.context, fixture)['id']
+
+        info = {'called': 0}
+        orig_method = self.service._client.client.images.get
+
+        def _get_image_meta(*args, **kwargs):
+            info['called'] += 1
+            return orig_method(*args, **kwargs)
+
+        self.stubs.Set(self.service._client.client.images, 'get',
+                _get_image_meta)
+
+        expected = {
+            'id': image_id,
+            'name': 'image1',
+            'is_public': True,
+            'size': None,
+            'min_disk': None,
+            'min_ram': None,
+            'disk_format': None,
+            'container_format': None,
+            'owner': None,
+            'checksum': None,
+            'created_at': self.NOW_DATETIME,
+            'updated_at': self.NOW_DATETIME,
+            'deleted_at': None,
+            'deleted': None,
+            'status': None,
+            'properties': {},
+        }
+
+        image_meta = self.service.show(self.context, image_id)
+        self.assertEqual(image_meta, expected)
+        # Make sure the client is used for first show
+        self.assertEqual(info['called'], 1)
+
+        image_meta = self.service.show(self.context, image_id)
+        self.assertEqual(image_meta, expected)
+        # Make sure the client is not used for second show
+        self.assertEqual(info['called'], 1)
+
+    def test_caching_with_show_on_non_public_image(self):
+        self.flags(glance_cache_metadata=True)
+        fixture = self._make_fixture(name='image1', is_public=False)
+        image_id = self.service.create(self.context, fixture)['id']
+
+        info = {'called': 0}
+        orig_method = self.service._client.client.images.get
+
+        def _get_image_meta(*args, **kwargs):
+            info['called'] += 1
+            return orig_method(*args, **kwargs)
+
+        self.stubs.Set(self.service._client.client.images, 'get',
+                _get_image_meta)
+
+        expected = {
+            'id': image_id,
+            'name': 'image1',
+            'is_public': False,
+            'size': None,
+            'min_disk': None,
+            'min_ram': None,
+            'disk_format': None,
+            'container_format': None,
+            'owner': None,
+            'checksum': None,
+            'created_at': self.NOW_DATETIME,
+            'updated_at': self.NOW_DATETIME,
+            'deleted_at': None,
+            'deleted': None,
+            'status': None,
+            'properties': {},
+        }
+
+        image_meta = self.service.show(self.context, image_id)
+        self.assertEqual(image_meta, expected)
+        # Make sure the client is used for first show
+        self.assertEqual(info['called'], 1)
+
+        image_meta = self.service.show(self.context, image_id)
+        self.assertEqual(image_meta, expected)
+        # Make sure no caching was used
+        self.assertEqual(info['called'], 2)
+
+    def test_caching_with_detail_and_show(self):
+        self.flags(glance_cache_metadata=True)
+        fixture = self._make_fixture(name='image1', is_public=True)
+        image_id = self.service.create(self.context, fixture)['id']
+
+        # This should populate the cache
+        self.service.detail(self.context)
+
+        info = {'called': 0}
+        orig_method = self.service._client.client.images.get
+
+        def _get_image_meta(*args, **kwargs):
+            info['called'] += 1
+            return orig_method(*args, **kwargs)
+
+        self.stubs.Set(self.service._client.client.images, 'get',
+                _get_image_meta)
+
+        expected = {
+            'id': image_id,
+            'name': 'image1',
+            'is_public': True,
+            'size': None,
+            'min_disk': None,
+            'min_ram': None,
+            'disk_format': None,
+            'container_format': None,
+            'owner': None,
+            'checksum': None,
+            'created_at': self.NOW_DATETIME,
+            'updated_at': self.NOW_DATETIME,
+            'deleted_at': None,
+            'deleted': None,
+            'status': None,
+            'properties': {},
+        }
+
+        image_meta = self.service.show(self.context, image_id)
+        self.assertEqual(image_meta, expected)
+        # Make sure the client is not called
+        self.assertEqual(info['called'], 0)
+
 
 def _create_failing_glance_client(info):
     class MyGlanceStubClient(glance_stubs.StubGlanceClient):
@@ -734,3 +867,151 @@ class TestGlanceClientWrapper(test.TestCase):
 
         client2.call(ctxt, 1, 'get', 'meow')
         self.assertEqual(info['num_calls'], 2)
+
+
+class TestGlanceImageCache(test.TestCase):
+    def setUp(self):
+        super(TestGlanceImageCache, self).setUp()
+        self.flags(glance_cache_metadata=True,
+                glance_cache_max_memory=0,
+                glance_cache_max_entries=0,
+                glance_cache_recheck_age=0)
+        self.cache = glance.GlanceImageMetaDataCache
+        self.cache.clear_cache()
+
+    @staticmethod
+    def _create_image(image_id, **values):
+        metadata = {'id': image_id, 'is_public': True}
+        metadata.update(values)
+        return glance_stubs.FakeImage(metadata)
+
+    def test_basic_store_get_and_clear_cache(self):
+        image = self._create_image(1, moo='cow', meow='wuff')
+        sz = sys.getsizeof(image)
+        self.cache.store_image_meta(image)
+        self.assertEqual(self.cache.rough_size, sz)
+        self.assertEqual(len(self.cache.entries_list), 1)
+        self.assertEqual(len(self.cache.entries_by_id), 1)
+
+        old_updated = self.cache.entries_list[0]['last_update']
+        fake_now = old_updated + datetime.timedelta(seconds=2)
+
+        def _utcnow():
+            return fake_now
+
+        self.stubs.Set(timeutils, 'utcnow', _utcnow)
+
+        result = self.cache.get_image_meta(1)
+        self.assertTrue(result is image)
+
+        # make sure the 'last_update' is the same as before
+        self.assertEqual(old_updated,
+                self.cache.entries_list[0]['last_update'])
+
+        self.cache.clear_cache()
+        self.assertEqual(len(self.cache.entries_list), 0)
+        self.assertEqual(len(self.cache.entries_by_id), 0)
+        self.assertEqual(self.cache.rough_size, 0)
+
+    def test_max_entries(self):
+        self.flags(glance_cache_max_entries=10)
+
+        for x in xrange(10):
+            meta = self._create_image(x)
+            self.cache.store_image_meta(meta)
+
+        self.assertEqual(len(self.cache.entries_list), 10)
+
+        # Push 0 to the top then 2 to the top
+        self.cache.get_image_meta(0)
+        self.cache.get_image_meta(2)
+
+        # Add a few more entries
+        for x in xrange(10, 13):
+            meta = self._create_image(x)
+            self.cache.store_image_meta(meta)
+
+        # Still 10
+        self.assertEqual(len(self.cache.entries_list), 10)
+        # These should have stuck around
+        self.assertNotEqual(self.cache.get_image_meta(0), None)
+        self.assertNotEqual(self.cache.get_image_meta(2), None)
+        # These not.. as oldest entries not queried will get removed
+        self.assertEqual(self.cache.get_image_meta(1), None)
+        self.assertEqual(self.cache.get_image_meta(3), None)
+        self.assertEqual(self.cache.get_image_meta(4), None)
+
+    def test_max_size(self):
+        # Create some entries
+        for x in xrange(10):
+            meta = self._create_image(x)
+            self.cache.store_image_meta(meta)
+
+        # Get current size
+        sz = self.cache.rough_size
+
+        # Now let's lower it
+        self.flags(glance_cache_max_memory=sz - 1)
+
+        self.assertEqual(len(self.cache.entries_list), 10)
+
+        # Let's add a new entry and watch the num entries go down
+        # when we add a new one..
+
+        meta = self._create_image(10)
+        self.cache.store_image_meta(meta)
+
+        self.assertEqual(len(self.cache.entries_list), 9)
+
+        # This should have taken
+        self.assertNotEqual(self.cache.get_image_meta(10), None)
+        # These not.. as oldest entries not queried will get removed
+        self.assertEqual(self.cache.get_image_meta(0), None)
+        self.assertEqual(self.cache.get_image_meta(1), None)
+
+    def test_recheck_age(self):
+        self.flags(glance_cache_recheck_age=10)
+
+        fake_now = timeutils.utcnow()
+
+        def _utcnow():
+            return fake_now
+
+        self.stubs.Set(timeutils, 'utcnow', _utcnow)
+
+        # Create some entries
+        for x in xrange(10):
+            meta = self._create_image(x)
+            self.cache.store_image_meta(meta)
+            # Fudge the times
+            delta = datetime.timedelta(seconds=x * 2)
+            self.cache.entries_list[0]['last_update'] -= delta
+
+        # Too old
+        for x in xrange(6, 10):
+            self.assertEqual(self.cache.get_image_meta(x), None)
+
+        # Not too old
+        for x in xrange(0, 6):
+            self.assertNotEqual(self.cache.get_image_meta(x), None)
+
+    def test_update_existing_entry(self):
+        meta = self._create_image(0)
+        self.cache.store_image_meta(meta)
+        self.assertEqual(self.cache.get_image_meta(0), meta)
+
+        old_updated = self.cache.entries_list[0]['last_update']
+        fake_now = old_updated + datetime.timedelta(seconds=2)
+
+        def _utcnow():
+            return fake_now
+
+        self.stubs.Set(timeutils, 'utcnow', _utcnow)
+
+        meta2 = self._create_image(0, moo='cow')
+        self.cache.store_image_meta(meta2)
+
+        new_updated = self.cache.entries_list[0]['last_update']
+        self.assertEqual(new_updated, fake_now)
+
+        self.assertEqual(self.cache.get_image_meta(0), meta2)

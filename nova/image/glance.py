@@ -32,6 +32,7 @@ import glanceclient.exc
 from nova import config
 from nova import exception
 from nova import flags
+from nova.openstack.common import cfg
 from nova.openstack.common import jsonutils
 from nova.openstack.common import log as logging
 from nova.openstack.common import timeutils
@@ -39,6 +40,126 @@ from nova.openstack.common import timeutils
 
 LOG = logging.getLogger(__name__)
 CONF = config.CONF
+
+
+image_service_opts = [
+        cfg.BoolOpt('glance_cache_metadata',
+                default=False,
+                help='Whether or not to cache image metadata'),
+        cfg.IntOpt('glance_cache_max_memory',
+                default=10 * 1024 * 1024,
+                help='Maximum memory in bytes to use by the cache'),
+        cfg.IntOpt('glance_cache_max_entries',
+                default=1000,
+                help='Maximum number of entries in the cache'),
+        cfg.IntOpt('glance_cache_recheck_age',
+                default=300,
+                help='Age of cache entry in seconds which causes a refresh'),
+]
+
+
+CONF.register_opts(image_service_opts)
+
+
+class _GlanceImageMetaDataCache(object):
+    """Simple cache for image metadata."""
+
+    def __init__(self):
+        self.clear_cache()
+
+    def clear_cache(self):
+        """Clear the cache."""
+
+        self.entries_by_id = {}
+        self.entries_list = []
+        self.rough_size = 0
+
+    def create_entry(self, image_id, image_meta):
+        """Create a new cache entry."""
+
+        rough_size = sys.getsizeof(image_meta)
+        entry = {'image_id': image_id,
+                 'metadata': image_meta,
+                 'rough_size': rough_size,
+                 'last_update': timeutils.utcnow()}
+        self.entries_by_id[image_id] = entry
+        self.rough_size += rough_size
+        self.entries_list.insert(0, entry)
+
+    def update_entry(self, entry, image_meta=None):
+        """Update and move cache entry to top of list."""
+
+        if self.entries_list[0] != entry:
+            # Move to the top of list
+            self.entries_list.remove(entry)
+            self.entries_list.insert(0, entry)
+        if image_meta is not None:
+            rough_size = sys.getsizeof(image_meta)
+            self.rough_size += (rough_size - entry['rough_size'])
+            entry['rough_size'] = rough_size
+            entry['metadata'] = image_meta
+            entry['last_update'] = timeutils.utcnow()
+
+    def remove_entry(self):
+        """Remove a cache entry from bottom of list."""
+
+        entry = self.entries_list.pop()
+        image_id = entry['image_id']
+        del self.entries_by_id[image_id]
+        self.rough_size -= entry['rough_size']
+        rough_size = self.rough_size
+        num = len(self.entries_list)
+        LOG.debug(_("Removed metadata for image '%(image_id)s' from "
+                "cache (cache size now %(num)s/%(rough_size)s"), locals())
+
+    def get_image_meta(self, image_id):
+        """Get image metadata.  Return None if non-existant or too old."""
+
+        if image_id not in self.entries_by_id:
+            return
+        recheck_age = CONF.glance_cache_recheck_age
+        entry = self.entries_by_id[image_id]
+        if (recheck_age and
+                timeutils.is_older_than(entry['last_update'], recheck_age)):
+            # Pretend this doesn't exist.  Caller will attempt to
+            # fetch from glance.. and potentially restore this entry.
+            LOG.debug(_("Forcing re-check of metadata for image "
+                    "'%(image_id)s' from cache"), locals())
+            return
+        self.update_entry(entry)
+        LOG.debug(_("Returning metadata for image '%(image_id)s' from "
+                "cache"), locals())
+        return entry['metadata']
+
+    def store_image_meta(self, image_meta):
+        """Store image metadata.  Update existing entry if necessary."""
+
+        if not CONF.glance_cache_metadata:
+            return
+        if not getattr(image_meta, 'is_public', False):
+            return
+        image_id = image_meta.id
+        if image_id in self.entries_by_id:
+            # We told caller to fetch.. so just update.
+            LOG.debug(_("Updating metadata for image '%(image_id)s' in "
+                    "cache"), locals())
+            entry = self.entries_by_id[image_id]
+            self.update_entry(entry, image_meta)
+            return
+        self.create_entry(image_id, image_meta)
+        rough_size = self.rough_size
+        num = len(self.entries_list)
+        LOG.debug(_("Stored metadata for image '%(image_id)s' in "
+                "cache (cache size now %(num)s/%(rough_size)s)"),
+                locals())
+        max_entries = CONF.glance_cache_max_entries
+        max_size = CONF.glance_cache_max_memory
+        while ((max_entries > 0 and len(self.entries_list) > max_entries) or
+                (max_size > 0 and self.rough_size > max_size)):
+            self.remove_entry()
+
+
+GlanceImageMetaDataCache = _GlanceImageMetaDataCache()
 
 
 def _parse_image_ref(image_href):
@@ -180,6 +301,7 @@ class GlanceImageService(object):
 
     def __init__(self, client=None):
         self._client = client or GlanceClientWrapper()
+        self.cache = GlanceImageMetaDataCache
 
     def detail(self, context, **kwargs):
         """Calls out to Glance for a list of detailed image information."""
@@ -191,6 +313,7 @@ class GlanceImageService(object):
 
         _images = []
         for image in images:
+            self.cache.store_image_meta(image)
             if self._is_image_available(context, image):
                 _images.append(self._translate_from_glance(image))
 
@@ -213,10 +336,13 @@ class GlanceImageService(object):
 
     def show(self, context, image_id):
         """Returns a dict with image data for the given opaque image id."""
-        try:
-            image = self._client.call(context, 1, 'get', image_id)
-        except Exception:
-            _reraise_translated_image_exception(image_id)
+        image = self.cache.get_image_meta(image_id)
+        if image is None:
+            try:
+                image = self._client.call(context, 1, 'get', image_id)
+            except Exception:
+                _reraise_translated_image_exception(image_id)
+            self.cache.store_image_meta(image)
 
         if not self._is_image_available(context, image):
             raise exception.ImageNotFound(image_id=image_id)
