@@ -1331,13 +1331,13 @@ def instance_create(context, values):
     if not values.get('uuid'):
         values['uuid'] = str(utils.gen_uuid())
     instance_ref.update(values)
+    instance_ref['info_cache'] = models.InstanceInfoCache()
+    if 'info_cache' in values:
+        instance_ref['info_cache'].update(values['info_cache'])
 
     session = get_session()
     with session.begin():
         instance_ref.save(session=session)
-
-    # and creat the info_cache table entry for instance
-    instance_info_cache_create(context, {'instance_id': instance_ref['uuid']})
 
     return instance_ref
 
