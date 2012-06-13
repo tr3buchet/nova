@@ -668,8 +668,12 @@ def instance_update_and_get_original(context, instance_uuid, values):
 
     Raises NotFound if instance does not exist.
     """
-    return IMPL.instance_update_and_get_original(context, instance_uuid,
-                                                 values)
+    rv = IMPL.instance_update_and_get_original(context, instance_uuid, values)
+    try:
+        cells_api.instance_update(context, rv[1])
+    except Exception:
+        LOG.exception(_("Failed to notify cells of instance update"))
+    return rv
 
 
 def instance_add_security_group(context, instance_id, security_group_id):
