@@ -1463,6 +1463,34 @@ def instance_type_destroy(context, name):
 ####################
 
 
+def cell_create(context, values):
+    """Create a new child Cell entry."""
+    return IMPL.cell_create(context, values)
+
+
+def cell_update(context, cell_id, values):
+    """Update a child Cell entry."""
+    return IMPL.cell_update(context, cell_id, values)
+
+
+def cell_delete(context, cell_id):
+    """Delete a child Cell."""
+    return IMPL.cell_delete(context, cell_id)
+
+
+def cell_get(context, cell_id):
+    """Get a specific child Cell."""
+    return IMPL.cell_get(context, cell_id)
+
+
+def cell_get_all(context):
+    """Get all child Cells."""
+    return IMPL.cell_get_all(context)
+
+
+####################
+
+
 def instance_metadata_get(context, instance_uuid):
     """Get all metadata for an instance."""
     return IMPL.instance_metadata_get(context, instance_uuid)
