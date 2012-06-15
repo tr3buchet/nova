@@ -71,11 +71,18 @@ def form_instance_update_broadcast_message(instance, routing_path=None,
     if info_cache is not None:
         instance['info_cache'] = dict(info_cache.iteritems())
         instance['info_cache'].pop('id', None)
+        instance['info_cache'].pop('instance', None)
     # Fixup metadata (should be a dict for update, not a list)
     if 'metadata' in instance and isinstance(instance['metadata'], list):
         metadata = dict([(md['key'], md['value'])
                 for md in instance['metadata']])
         instance['metadata'] = metadata
+    # Fixup system_metadata (should be a dict for update, not a list)
+    if ('system_metadata' in instance and
+            isinstance(instance['system_metadata'], list)):
+        sys_metadata = dict([(md['key'], md['value'])
+                for md in instance['system_metadata']])
+        instance['system_metadata'] = sys_metadata
 
     return form_broadcast_message('up', 'instance_update',
             {'instance_info': instance},
