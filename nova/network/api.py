@@ -79,7 +79,7 @@ def refresh_cache(f):
                 nw_info = self._get_instance_nw_info(context, instance)
 
             # update cache
-            cache = {'network_info': nw_info.json()}
+            cache = {'network_info': nw_info.as_cache()}
             self.db.instance_info_cache_update(context, instance['uuid'],
                                                cache)
         except Exception:
