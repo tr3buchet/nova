@@ -287,7 +287,6 @@ class API(base.Base):
                  {'method': 'add_network_to_project',
                   'args': {'project_id': project_id}})
 
-    @refresh_cache
     def get_instance_nw_info(self, context, instance):
         """Returns all network info related to an instance."""
         return self._get_instance_nw_info(context, instance)
