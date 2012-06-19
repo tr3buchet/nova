@@ -24,10 +24,10 @@ import glance.common.exception as glance_exception
 from nova import context
 from nova import exception
 from nova.image import glance
+from nova.openstack.common import timeutils
 from nova import test
 from nova.tests.api.openstack import fakes
 from nova.tests.glance import stubs as glance_stubs
-from nova import utils
 
 
 class NullWriter(object):
@@ -744,7 +744,7 @@ class TestGlanceImageCache(test.TestCase):
         def _utcnow():
             return fake_now
 
-        self.stubs.Set(utils, 'utcnow', _utcnow)
+        self.stubs.Set(timeutils, 'utcnow', _utcnow)
 
         result = self.cache.get_image_meta(1)
         self.assertEqual(result, meta)
@@ -817,12 +817,12 @@ class TestGlanceImageCache(test.TestCase):
     def test_recheck_age(self):
         self.flags(glance_cache_recheck_age=10)
 
-        fake_now = utils.utcnow()
+        fake_now = timeutils.utcnow()
 
         def _utcnow():
             return fake_now
 
-        self.stubs.Set(utils, 'utcnow', _utcnow)
+        self.stubs.Set(timeutils, 'utcnow', _utcnow)
 
         # Create some entries
         for x in xrange(10):
@@ -851,7 +851,7 @@ class TestGlanceImageCache(test.TestCase):
         def _utcnow():
             return fake_now
 
-        self.stubs.Set(utils, 'utcnow', _utcnow)
+        self.stubs.Set(timeutils, 'utcnow', _utcnow)
 
         meta2 = self._create_meta(0, moo='cow')
         self.cache.store_image_meta(meta2)

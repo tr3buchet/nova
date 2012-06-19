@@ -19,6 +19,7 @@ from nova.api.openstack import wsgi
 from nova.api.openstack import xmlutil
 from nova.compute import utils as compute_utils
 from nova import db
+from nova.openstack.common import timeutils
 from nova import utils
 
 ALIAS = "RAX-SERVER"
@@ -100,8 +101,8 @@ class ServerBandwidthController(wsgi.Controller):
                 # present or configured:
                 continue
 
-            start_period = utils.isotime(bw_interface["start_period"])
-            end_period = utils.isotime(bw_interface["last_refreshed"])
+            start_period = timeutils.isotime(bw_interface["start_period"])
+            end_period = timeutils.isotime(bw_interface["last_refreshed"])
 
             vif_bw_usage = instance_to_macs[uuid][mac]
             vif_bw_usage.update(dict(

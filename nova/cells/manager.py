@@ -40,6 +40,7 @@ from nova import network
 from nova.openstack.common import cfg
 from nova.openstack.common import importutils
 from nova.openstack.common.rpc import common as rpc_common
+from nova.openstack.common import timeutils
 from nova import utils
 from nova import volume
 
@@ -95,12 +96,12 @@ class CellInfo(object):
 
     def update_capabilities(self, cell_metadata):
         """Update cell capabilities for a cell."""
-        self.last_seen = utils.utcnow()
+        self.last_seen = timeutils.utcnow()
         self.capabilities = cell_metadata
 
     def update_capacities(self, capacities):
         """Update capacity information for a cell."""
-        self.last_seen = utils.utcnow()
+        self.last_seen = timeutils.utcnow()
         self.capacities = capacities
 
     def get_cell_info(self):
@@ -230,10 +231,10 @@ class CellsManager(manager.Manager):
         """Update status for all cells.  This should be called
         periodically to refresh the cell states.
         """
-        diff = utils.utcnow() - self.last_cell_db_check
+        diff = timeutils.utcnow() - self.last_cell_db_check
         if diff.seconds >= FLAGS.cell_db_check_interval:
             LOG.debug(_("Updating cell cache from db."))
-            self.last_cell_db_check = utils.utcnow()
+            self.last_cell_db_check = timeutils.utcnow()
             self._refresh_cells_from_db(context)
 
     @manager.periodic_task
@@ -694,7 +695,7 @@ class CellsManager(manager.Manager):
                 threshold = FLAGS.cell_instance_updated_at_threshold
                 updated_since = None
                 if threshold > 0:
-                    updated_since = utils.utcnow() - datetime.timedelta(
+                    updated_since = timeutils.utcnow() - datetime.timedelta(
                             seconds=threshold)
                 self.instances_to_heal = self._get_instances_to_sync(
                         context, updated_since=updated_since, shuffle=True,

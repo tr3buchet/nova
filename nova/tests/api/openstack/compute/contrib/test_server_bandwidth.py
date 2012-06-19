@@ -22,6 +22,7 @@ from nova.api.openstack import xmlutil
 import nova.db
 from nova import flags
 from nova.openstack.common import jsonutils
+from nova.openstack.common import timeutils
 from nova import test
 from nova.tests.api.openstack import fakes
 from nova import utils
@@ -133,9 +134,9 @@ class ServerBandwidthTestCase(test.TestCase):
 
     def _bw_matches(self, ext, fake_usage):
         self.assertEqual(ext['audit_period_start'],
-                utils.isotime(fake_usage['start_period']))
+                timeutils.isotime(fake_usage['start_period']))
         self.assertEqual(ext['audit_period_end'],
-                utils.isotime(fake_usage['last_refreshed']))
+                timeutils.isotime(fake_usage['last_refreshed']))
         self.assertEqual(ext['bandwidth_inbound'],
                 fake_usage['bw_in'])
         self.assertEqual(ext['bandwidth_outbound'],

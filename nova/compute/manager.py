@@ -928,7 +928,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         # We will remove this when their system is fixed. (mdragon)
         instance = self._instance_update(context,
                                           instance.uuid,
-                                          launched_at=utils.utcnow())
+                                          launched_at=timeutils.utcnow())
         # Endhack.
 
         # This instance.exists message should contain the original
@@ -1397,7 +1397,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         # We will remove this when their system is fixed. (mdragon)
         instance_ref = self._instance_update(context,
                                           instance_ref.uuid,
-                                          launched_at=utils.utcnow())
+                                          launched_at=timeutils.utcnow())
         # Endhack.
 
         compute_utils.notify_usage_exists(

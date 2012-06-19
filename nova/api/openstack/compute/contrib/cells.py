@@ -31,7 +31,7 @@ from nova import db
 from nova import exception
 from nova import flags
 from nova import log as logging
-from nova import utils
+from nova.openstack.common import timeutils
 
 
 LOG = logging.getLogger("nova.api.openstack.compute.contrib.cells")
@@ -281,7 +281,7 @@ class Controller(object):
             raise exc.HTTPBadRequest(explanation=msg)
         if updated_since:
             try:
-                utils.parse_isotime(updated_since)
+                timeutils.parse_isotime(updated_since)
             except ValueError:
                 msg = _('Invalid changes-since value')
                 raise exc.HTTPBadRequest(explanation=msg)

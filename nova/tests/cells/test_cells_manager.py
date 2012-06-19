@@ -26,9 +26,9 @@ from nova import db
 from nova import exception
 from nova import flags
 from nova.openstack.common.rpc import common as rpc_common
+from nova.openstack.common import timeutils
 from nova import test
 from nova.tests.cells import fakes
-from nova import utils
 
 
 FLAGS = flags.FLAGS
@@ -567,7 +567,7 @@ class CellsManagerClassTestCase(test.TestCase):
                  cell_instance_update_interval=-1)
 
         fake_context = context.RequestContext('fake', 'fake')
-        stalled_time = utils.utcnow()
+        stalled_time = timeutils.utcnow()
         updated_since = stalled_time - datetime.timedelta(seconds=1000)
 
         def utcnow():
@@ -598,7 +598,7 @@ class CellsManagerClassTestCase(test.TestCase):
                 instance_get_by_uuid)
         self.stubs.Set(self.cells_manager, '_sync_instance',
                 sync_instance)
-        self.stubs.Set(utils, 'utcnow', utcnow)
+        self.stubs.Set(timeutils, 'utcnow', utcnow)
 
         self.cells_manager._heal_instances(fake_context)
         self.assertEqual(call_info['shuffle'], True)

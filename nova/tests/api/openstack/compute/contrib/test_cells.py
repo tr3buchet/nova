@@ -24,9 +24,9 @@ from nova.cells import api as cells_api
 from nova import context
 from nova import db
 from nova import flags
+from nova.openstack.common import timeutils
 from nova import test
 from nova.tests.api.openstack import fakes
-from nova import utils
 
 
 FLAGS = flags.FLAGS
@@ -290,7 +290,7 @@ class CellsTest(test.TestCase):
         self.assertEqual(call_info['project_id'], 'test-project')
         self.assertEqual(call_info['updated_since'], None)
 
-        expected = utils.utcnow().isoformat()
+        expected = timeutils.utcnow().isoformat()
         if not expected.endswith("+00:00"):
             expected += "+00:00"
 

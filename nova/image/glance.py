@@ -82,7 +82,7 @@ class _GlanceImageMetaDataCache(object):
         entry = {'image_id': image_id,
                  'metadata': image_meta,
                  'rough_size': rough_size,
-                 'last_update': utils.utcnow()}
+                 'last_update': timeutils.utcnow()}
         self.entries_by_id[image_id] = entry
         self.rough_size += rough_size
         self.entries_list.insert(0, entry)
@@ -99,7 +99,7 @@ class _GlanceImageMetaDataCache(object):
             self.rough_size += (rough_size - entry['rough_size'])
             entry['rough_size'] = rough_size
             entry['metadata'] = image_meta
-            entry['last_update'] = utils.utcnow()
+            entry['last_update'] = timeutils.utcnow()
 
     def remove_entry(self):
         """Remove a cache entry from bottom of list."""
@@ -121,7 +121,7 @@ class _GlanceImageMetaDataCache(object):
         recheck_age = FLAGS.glance_cache_recheck_age
         entry = self.entries_by_id[image_id]
         if (recheck_age and
-                utils.is_older_than(entry['last_update'], recheck_age)):
+                timeutils.is_older_than(entry['last_update'], recheck_age)):
             # Pretend this doesn't exist.  Caller will attempt to
             # fetch from glance.. and potentially restore this entry.
             LOG.debug(_("Forcing re-check of metadata for image "
