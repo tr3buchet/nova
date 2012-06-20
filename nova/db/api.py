@@ -1217,9 +1217,15 @@ def snapshot_update(context, snapshot_id, values):
 ####################
 
 
-def block_device_mapping_create(context, values):
+def block_device_mapping_create(context, values, update_cells=True):
     """Create an entry of block device mapping"""
-    return IMPL.block_device_mapping_create(context, values)
+    rv = IMPL.block_device_mapping_create(context, values)
+    if update_cells:
+        try:
+            cells_api.block_device_mapping_create(context, rv)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of BDM create"))
+    return rv
 
 
 def block_device_mapping_update(context, bdm_id, values):
@@ -1244,11 +1250,18 @@ def block_device_mapping_destroy(context, bdm_id):
     return IMPL.block_device_mapping_destroy(context, bdm_id)
 
 
-def block_device_mapping_destroy_by_instance_and_volume(context, instance_uuid,
-                                                        volume_id):
+def block_device_mapping_destroy_by_instance_and_volume(context,
+        instance_uuid, volume_id, update_cells=False):
     """Destroy the block device mapping or raise if it does not exist."""
-    return IMPL.block_device_mapping_destroy_by_instance_and_volume(
+    rv = IMPL.block_device_mapping_destroy_by_instance_and_volume(
         context, instance_uuid, volume_id)
+    if update_cells:
+        try:
+            cells_api.block_device_mapping_destroy(context,
+                    instance_uuid, volume_id)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of BDM destroy"))
+    return rv
 
 
 ####################

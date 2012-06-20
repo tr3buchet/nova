@@ -2048,41 +2048,41 @@ class CloudTestCase(test.TestCase):
 
         vols = db.volume_get_all_by_instance_uuid(self.context, instance_uuid)
         self.assertEqual(len(vols), 1)
-        for vol in vols:
-            self.assertEqual(vol['id'], vol1['id'])
-            self._assert_volume_attached(vol, instance_uuid, '/dev/vdb')
+        for db_vol in vols:
+            self.assertEqual(db_vol['id'], vol1['id'])
+            self._assert_volume_attached(db_vol, instance_uuid, '/dev/vdb')
 
-        vol = db.volume_get(self.context, vol2['id'])
-        self._assert_volume_detached(vol)
+        db_vol2 = db.volume_get(self.context, vol2['id'])
+        self._assert_volume_detached(db_vol2)
 
         instance = db.instance_get(self.context, instance_id)
         self.cloud.compute_api.attach_volume(self.context,
                                              instance,
                                              volume_id=vol2['id'],
                                              device='/dev/vdc')
-        vol = db.volume_get(self.context, vol2['id'])
-        self._assert_volume_attached(vol, instance_uuid, '/dev/vdc')
+        db_vol2 = db.volume_get(self.context, vol2['id'])
+        self._assert_volume_attached(db_vol2, instance_uuid, '/dev/vdc')
 
-        self.cloud.compute_api.detach_volume(self.context,
-                                             volume_id=vol1['id'])
-        vol = db.volume_get(self.context, vol1['id'])
-        self._assert_volume_detached(vol)
+        db_vol1 = db.volume_get(self.context, vol1['id'])
+        self.cloud.compute_api.detach_volume(self.context, instance, db_vol1)
+        db_vol1 = db.volume_get(self.context, vol1['id'])
+        self._assert_volume_detached(db_vol1)
 
         result = self.cloud.stop_instances(self.context, [ec2_instance_id])
         self.assertTrue(result)
 
-        vol = db.volume_get(self.context, vol2['id'])
-        self._assert_volume_attached(vol, instance_uuid, '/dev/vdc')
+        db_vol2 = db.volume_get(self.context, vol2['id'])
+        self._assert_volume_attached(db_vol2, instance_uuid, '/dev/vdc')
 
         self.cloud.start_instances(self.context, [ec2_instance_id])
         vols = db.volume_get_all_by_instance_uuid(self.context, instance_uuid)
         self.assertEqual(len(vols), 1)
-        for vol in vols:
-            self.assertEqual(vol['id'], vol2['id'])
-            self._assert_volume_attached(vol, instance_uuid, '/dev/vdc')
+        for db_vol in vols:
+            self.assertEqual(db_vol['id'], vol2['id'])
+            self._assert_volume_attached(db_vol, instance_uuid, '/dev/vdc')
 
-        vol = db.volume_get(self.context, vol1['id'])
-        self._assert_volume_detached(vol)
+        db_vol1 = db.volume_get(self.context, vol1['id'])
+        self._assert_volume_detached(db_vol1)
 
         self.cloud.terminate_instances(self.context, [ec2_instance_id])
 

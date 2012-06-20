@@ -377,14 +377,18 @@ class ComputeCellsAPI(compute_api.API):
         """Attach an existing volume to an existing instance."""
         if not re.match("^/dev/x{0,1}[a-z]d[a-z]+$", device):
             raise exception.InvalidDevicePath(path=device)
+        super(ComputeCellsAPI, self).attach_volume(context, instance,
+                volume_id, device)
         self._cast_to_cells(context, instance, 'attach_volume',
                 volume_id, device)
 
     @wrap_check_policy
-    def detach_volume(self, context, volume_id):
+    def detach_volume(self, context, instance, volume):
         """Detach a volume from an instance."""
         # FIXME(comstud): this call should be in volume i think?
-        return
+        super(ComputeCellsAPI, self).detach_volume(context, instance, volume)
+        self._cast_to_cells(context, instance, 'detach_volume',
+                dict(volume.iteritems()))
 
     @wrap_check_policy
     def associate_floating_ip(self, context, instance, address):

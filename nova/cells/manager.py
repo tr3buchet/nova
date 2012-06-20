@@ -39,6 +39,7 @@ from nova import network
 from nova.openstack.common import cfg
 from nova.openstack.common import importutils
 from nova.openstack.common import log as logging
+from nova.openstack.common import rpc
 from nova.openstack.common.rpc import common as rpc_common
 from nova.openstack.common import timeutils
 from nova import utils
@@ -783,6 +784,90 @@ class CellsManager(manager.Manager):
             self.db.instance_info_cache_update(context, instance_uuid,
                     info_cache)
 
+    def volume_attached(self, context, volume_info, routing_path,
+            **kwargs):
+        """Update a volume in the DB if we're a top level cell."""
+        if self.get_parent_cells() or self._path_is_us(routing_path):
+            # Only update the DB if we're at the very top and the
+            # call didn't originate from ourselves
+            return
+        volume_id = volume_info['volume_id']
+        instance_uuid = volume_info['instance_uuid']
+        mountpoint = volume_info['mountpoint']
+        LOG.debug(_("Got 'attached' for volume %(volume_id)s: "
+                "%(volume_info)s") % locals())
+        try:
+            self.db.volume_attached(context, volume_id, instance_uuid,
+                    mountpoint)
+        except exception.NotFound:
+            # Strange.
+            pass
+
+    def volume_detached(self, context, volume_info, routing_path,
+            **kwargs):
+        """Update a volume in the DB if we're a top level cell."""
+        if self.get_parent_cells() or self._path_is_us(routing_path):
+            # Only update the DB if we're at the very top and the
+            # call didn't originate from ourselves
+            return
+        volume_id = volume_info['volume_id']
+        LOG.debug(_("Got 'detached' for volume %(volume_id)s") % locals())
+        try:
+            self.db.volume_detached(context, volume_id)
+        except exception.NotFound:
+            # Strange.
+            pass
+
+    def volume_unreserved(self, context, volume_info, routing_path,
+            **kwargs):
+        """Update a volume in the DB if we're a top level cell."""
+        if self.get_parent_cells() or self._path_is_us(routing_path):
+            # Only update the DB if we're at the very top and the
+            # call didn't originate from ourselves
+            return
+        volume_id = volume_info['volume_id']
+        LOG.debug(_("Got 'unreserved' for volume %(volume_id)s") % locals())
+        try:
+            # This method is overloaded, I hate that this read/write is needed
+            if self.db.volume_get(context, volume_id)['status'] == 'attaching':
+                self.db.volume_update(context, volume_id,
+                        {'status': 'available'})
+        except exception.NotFound:
+            # Strange.
+            pass
+
+    def bdm_create(self, context, bdm_info, routing_path,
+            **kwargs):
+        """Create a BDM in the DB if we're a top level cell."""
+        if self.get_parent_cells() or self._path_is_us(routing_path):
+            # Only update the DB if we're at the very top and the
+            # call didn't originate from ourselves
+            return
+        LOG.debug(_("Got 'create' for BDM %(bdm_info)s") % locals())
+        try:
+            self.db.block_device_mapping_create(context, bdm_info,
+                    update_cells=False)
+        except exception.NotFound:
+            # Strange.
+            pass
+
+    def bdm_destroy(self, context, bdm_info, routing_path,
+            **kwargs):
+        """Destroy a BDM in the DB if we're a top level cell."""
+        if self.get_parent_cells() or self._path_is_us(routing_path):
+            # Only update the DB if we're at the very top and the
+            # call didn't originate from ourselves
+            return
+        LOG.debug(_("Got 'destroy' for BDM %(bdm_info)s") % locals())
+        try:
+            self.db.block_device_mapping_destroy_by_instance_and_volume(
+                    context, bdm_info['instance_uuid'],
+                    bdm_info['volume_id'],
+                    update_cells=False)
+        except exception.NotFound:
+            # Strange.
+            pass
+
     def instance_destroy(self, context, instance_info, routing_path=None,
             **kwargs):
         """Destroy an instance from the DB if we're a top level cell."""
@@ -816,3 +901,8 @@ class CellsManager(manager.Manager):
     def announce_capacities(self, context, routing_path, **kwargs):
         """A parent cell has told us to send our capacity."""
         self._tell_parents_our_capacities(context)
+
+    def create_volume(self, context, topic, **kwargs):
+        msg = {"method": "create_volume",
+               "args": kwargs}
+        rpc.cast(context, topic, msg)

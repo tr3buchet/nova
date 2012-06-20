@@ -1582,25 +1582,18 @@ class API(base.Base):
         self.compute_rpcapi.attach_volume(context, instance=instance,
                 volume_id=volume_id, mountpoint=device)
 
-    # FIXME(comstud): I wonder if API should pull in the instance from
-    # the volume ID via volume API and pass it and the volume object here
-    def detach_volume(self, context, volume_id):
+    @wrap_check_policy
+    def detach_volume(self, context, instance, volume):
         """Detach a volume from an instance."""
-        volume = self.volume_api.get(context, volume_id)
-        instance_uuid = volume['instance_uuid']
-        instance = self.db.instance_get_by_uuid(context.elevated(),
-                                                instance_uuid)
-        if not instance:
+        volume_id = volume['id']
+        instance_uuid = instance['uuid']
+        if volume['instance_uuid'] != instance_uuid:
             raise exception.VolumeUnattached(volume_id=volume_id)
 
-        check_policy(context, 'detach_volume', instance)
-
-        volume = self.volume_api.get(context, volume_id)
         self.volume_api.check_detach(context, volume)
 
         self.compute_rpcapi.detach_volume(context, instance=instance,
                 volume_id=volume_id)
-        return instance
 
     @wrap_check_policy
     def get_instance_metadata(self, context, instance):

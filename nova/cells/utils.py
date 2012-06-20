@@ -89,6 +89,46 @@ def form_instance_update_broadcast_message(instance, routing_path=None,
             routing_path=routing_path, hopcount=hopcount)
 
 
+def form_volume_attached_broadcast_message(volume_info, routing_path=None,
+        hopcount=0):
+    return form_broadcast_message('up', 'volume_attached',
+            {'volume_info': volume_info},
+            routing_path=routing_path, hopcount=hopcount)
+
+
+def form_volume_detached_broadcast_message(volume_info, routing_path=None,
+        hopcount=0):
+    return form_broadcast_message('up', 'volume_detached',
+            {'volume_info': volume_info},
+            routing_path=routing_path, hopcount=hopcount)
+
+
+def form_volume_unreserved_broadcast_message(volume_info, routing_path=None,
+        hopcount=0):
+    return form_broadcast_message('up', 'volume_unreserved',
+            {'volume_info': volume_info},
+            routing_path=routing_path, hopcount=hopcount)
+
+
+def form_bdm_create_broadcast_message(bdm, routing_path=None,
+        hopcount=0):
+    bdm = dict(bdm.iteritems())
+    # Remove things that we can't update in the parent.
+    items_to_remove = ['id']
+    for key in items_to_remove:
+        bdm.pop(key, None)
+    return form_broadcast_message('up', 'bdm_create',
+            {'bdm_info': bdm},
+            routing_path=routing_path, hopcount=hopcount)
+
+
+def form_bdm_destroy_broadcast_message(bdm_info, routing_path=None,
+        hopcount=0):
+    return form_broadcast_message('up', 'bdm_destroy',
+            {'bdm_info': bdm_info},
+            routing_path=routing_path, hopcount=hopcount)
+
+
 def form_instance_destroy_broadcast_message(instance, routing_path=None,
         hopcount=0):
     instance_info = {'uuid': instance['uuid']}

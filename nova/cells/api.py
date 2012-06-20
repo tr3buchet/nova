@@ -86,6 +86,58 @@ def instance_update(context, instance):
     rpc.cast(context, FLAGS.cells_topic, bcast_message)
 
 
+def volume_attached(context, volume_id, instance_uuid, mountpoint):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    volume_info = {'volume_id': volume_id,
+                   'instance_uuid': instance_uuid,
+                   'mountpoint': mountpoint}
+    bcast_message = cells_utils.form_volume_attached_broadcast_message(
+            volume_info)
+    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
+def block_device_mapping_create(context, bdm):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    bcast_message = cells_utils.form_bdm_create_broadcast_message(
+            bdm)
+    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
+def block_device_mapping_destroy(context, instance_uuid, volume_id):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    bdm_info = {'instance_uuid': instance_uuid,
+                'volume_id': volume_id}
+    bcast_message = cells_utils.form_bdm_destroy_broadcast_message(
+            bdm_info)
+    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
+def volume_detached(context, volume_id):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    volume_info = {'volume_id': volume_id}
+    bcast_message = cells_utils.form_volume_detached_broadcast_message(
+            volume_info)
+    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
+def volume_unreserved(context, volume_id):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    volume_info = {'volume_id': volume_id}
+    bcast_message = cells_utils.form_volume_unreserved_broadcast_message(
+            volume_info)
+    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
 def instance_destroy(context, instance):
     """Broadcast upwards that an instance was destroyed."""
     if not FLAGS.enable_cells:
