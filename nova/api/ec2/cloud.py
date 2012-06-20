@@ -832,9 +832,13 @@ class CloudController(object):
         volume_id = ec2utils.ec2_vol_id_to_uuid(volume_id)
         LOG.audit(_("Detach volume %s"), volume_id, context=context)
         volume = self.volume_api.get(context, volume_id)
+        instance_uuid = volume['instance_uuid']
+        if not instance_uuid:
+            raise exception.VolumeUnattached(volume_id=volume_id)
+        instance = db.instance_get_by_uuid(context, volume['instance_uuid'])
 
         try:
-            self.compute_api.detach_volume(context, volume_id=volume_id)
+            self.compute_api.detach_volume(context, instance, volume)
         except exception.InvalidVolume:
             raise exception.EC2APIError(_('Detach Volume Failed.'))
 

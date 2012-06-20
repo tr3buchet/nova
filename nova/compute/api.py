@@ -2015,32 +2015,27 @@ class API(base.Base):
         return device
 
     @check_instance_lock
-    def _detach_volume(self, context, instance, volume_id):
+    def _detach_volume(self, context, instance, volume):
         check_policy(context, 'detach_volume', instance)
 
-        volume = self.volume_api.get(context, volume_id)
         self.volume_api.check_detach(context, volume)
         self.volume_api.begin_detaching(context, volume)
 
         self.compute_rpcapi.detach_volume(context, instance=instance,
-                volume_id=volume_id)
+                volume_id=volume['id'])
         return instance
 
-    # FIXME(comstud): I wonder if API should pull in the instance from
-    # the volume ID via volume API and pass it and the volume object here
-    def detach_volume(self, context, volume_id):
+    @wrap_check_policy
+    def detach_volume(self, context, instance, volume):
         """Detach a volume from an instance."""
-        volume = self.volume_api.get(context, volume_id)
         if volume['attach_status'] == 'detached':
             msg = _("Volume must be attached in order to detach.")
             raise exception.InvalidVolume(reason=msg)
 
-        instance_uuid = volume['instance_uuid']
-        instance = self.db.instance_get_by_uuid(context.elevated(),
-                                                instance_uuid)
-        if not instance:
-            raise exception.VolumeUnattached(volume_id=volume_id)
-        self._detach_volume(context, instance, volume_id)
+        if volume['instance_uuid'] != instance['uuid']:
+            raise exception.VolumeUnattached(volume_id=volume['id'])
+
+        self._detach_volume(context, instance, volume)
 
     @wrap_check_policy
     def get_instance_metadata(self, context, instance):

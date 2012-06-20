@@ -1026,6 +1026,68 @@ def reservation_expire(context):
 ###################
 
 
+def volume_allocate_iscsi_target(context, volume_id, host):
+    """Atomically allocate a free iscsi_target from the pool."""
+    return IMPL.volume_allocate_iscsi_target(context, volume_id, host)
+
+
+def volume_attached(context, volume_id, instance_id, mountpoint,
+        update_cells=False):
+    """Ensure that a volume is set as attached."""
+    return IMPL.volume_attached(context, volume_id, instance_id, mountpoint)
+
+
+def volume_create(context, values):
+    """Create a volume from the values dictionary."""
+    return IMPL.volume_create(context, values)
+
+
+def volume_data_get_for_project(context, project_id, session=None):
+    """Get (volume_count, gigabytes) for project."""
+    return IMPL.volume_data_get_for_project(context, project_id,
+                                            session=session)
+
+
+def volume_destroy(context, volume_id):
+    """Destroy the volume or raise if it does not exist."""
+    return IMPL.volume_destroy(context, volume_id)
+
+
+def volume_detached(context, volume_id, update_cells=False):
+    """Ensure that a volume is set as detached."""
+    return IMPL.volume_detached(context, volume_id)
+
+
+def volume_get(context, volume_id):
+    """Get a volume or raise if it does not exist."""
+    return IMPL.volume_get(context, volume_id)
+
+
+def volume_get_all(context):
+    """Get all volumes."""
+    return IMPL.volume_get_all(context)
+
+
+def volume_get_all_by_host(context, host):
+    """Get all volumes belonging to a host."""
+    return IMPL.volume_get_all_by_host(context, host)
+
+
+def volume_get_all_by_instance_uuid(context, instance_uuid):
+    """Get all volumes belonging to an instance."""
+    return IMPL.volume_get_all_by_instance_uuid(context, instance_uuid)
+
+
+def volume_get_all_by_project(context, project_id):
+    """Get all volumes belonging to a project."""
+    return IMPL.volume_get_all_by_project(context, project_id)
+
+
+def volume_get_by_ec2_id(context, ec2_id):
+    """Get a volume by ec2 id."""
+    return IMPL.volume_get_by_ec2_id(context, ec2_id)
+
+
 def volume_get_iscsi_target_num(context, volume_id):
     """Get the target num (tid) allocated to the volume."""
     return IMPL.volume_get_iscsi_target_num(context, volume_id)
@@ -1058,9 +1120,15 @@ def ec2_snapshot_create(context, snapshot_id, forced_id=None):
 ####################
 
 
-def block_device_mapping_create(context, values):
+def block_device_mapping_create(context, values, update_cells=True):
     """Create an entry of block device mapping"""
-    return IMPL.block_device_mapping_create(context, values)
+    rv = IMPL.block_device_mapping_create(context, values)
+    if update_cells:
+        try:
+            cells_api.block_device_mapping_create(context, rv)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of BDM create"))
+    return rv
 
 
 def block_device_mapping_update(context, bdm_id, values):
@@ -1092,11 +1160,18 @@ def block_device_mapping_destroy_by_instance_and_device(context, instance_uuid,
         context, instance_uuid, device_name)
 
 
-def block_device_mapping_destroy_by_instance_and_volume(context, instance_uuid,
-                                                        volume_id):
-    """Destroy the block device mapping."""
-    return IMPL.block_device_mapping_destroy_by_instance_and_volume(
+def block_device_mapping_destroy_by_instance_and_volume(context,
+        instance_uuid, volume_id, update_cells=False):
+    """Destroy the block device mapping or raise if it does not exist."""
+    rv = IMPL.block_device_mapping_destroy_by_instance_and_volume(
         context, instance_uuid, volume_id)
+    if update_cells:
+        try:
+            cells_api.block_device_mapping_destroy(context,
+                    instance_uuid, volume_id)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of BDM destroy"))
+    return rv
 
 
 ####################

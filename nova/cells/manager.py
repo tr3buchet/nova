@@ -40,6 +40,7 @@ from nova.openstack.common import cfg
 from nova.openstack.common import excutils
 from nova.openstack.common import importutils
 from nova.openstack.common import log as logging
+from nova.openstack.common import rpc
 from nova.openstack.common.rpc import common as rpc_common
 from nova.openstack.common import timeutils
 from nova import utils
@@ -903,6 +904,24 @@ class CellsManager(manager.Manager):
             self.db.instance_info_cache_update(context, instance_uuid,
                     info_cache)
 
+    def volume_unreserved(self, context, volume_info, routing_path,
+            **kwargs):
+        """Update a volume in the DB if we're a top level cell."""
+        if self.get_parent_cells() or self._path_is_us(routing_path):
+            # Only update the DB if we're at the very top and the
+            # call didn't originate from ourselves
+            return
+        volume_id = volume_info['volume_id']
+        LOG.debug(_("Got 'unreserved' for volume %(volume_id)s") % locals())
+        try:
+            # This method is overloaded, I hate that this read/write is needed
+            if self.db.volume_get(context, volume_id)['status'] == 'attaching':
+                self.db.volume_update(context, volume_id,
+                        {'status': 'available'})
+        except exception.NotFound:
+            # Strange.
+            pass
+
     def instance_destroy(self, context, instance_info, routing_path=None,
             **kwargs):
         """Destroy an instance from the DB if we're a top level cell."""
@@ -945,6 +964,11 @@ class CellsManager(manager.Manager):
     def announce_capacities(self, context, routing_path, **kwargs):
         """A parent cell has told us to send our capacity."""
         self._tell_parents_our_capacities(context)
+
+    def create_volume(self, context, topic, **kwargs):
+        msg = {"method": "create_volume",
+               "args": kwargs}
+        rpc.cast(context, topic, msg)
 
     def get_service(self, context, routing_path, **kwargs):
         service_id = kwargs.get("service_id")

@@ -143,6 +143,54 @@ def instance_fault_create(context, instance_fault):
             (instance_fault, ))
 
 
+def block_device_mapping_create(context, bdm):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    bdm = dict(bdm.iteritems())
+    # Remove things that we can't update in the parent.
+    items_to_remove = ['id']
+    for key in items_to_remove:
+        bdm.pop(key, None)
+    call_dbapi_method(context, 'block_device_mapping_create',
+            (bdm, ))
+
+
+def block_device_mapping_destroy(context, instance_uuid, volume_id):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    call_dbapi_method(context,
+            'block_device_mapping_destroy_by_instance_and_volume',
+            (instance_uuid, volume_id))
+
+
+def volume_attached(context, volume_id, instance_uuid, mountpoint):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    call_dbapi_method(context, 'volume_attached', (volume_id,
+            instance_uuid, mountpoint))
+
+
+def volume_detached(context, volume_id):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    call_dbapi_method(context, 'volume_detached', (volume_id, ))
+
+
+def volume_unreserved(context, volume_id):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    volume_info = {'volume_id': volume_id}
+    bcast_message = cells_utils.form_broadcast_message(
+            'up', 'volume_unreserved',
+            {'volume_info': volume_info})
+    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
 def bw_usage_update(context, *args, **kwargs):
     """Broadcast upwards that bw_usage was updated."""
     if not FLAGS.enable_cells:

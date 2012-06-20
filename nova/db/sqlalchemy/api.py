@@ -2891,6 +2891,7 @@ def block_device_mapping_create(context, values):
     session = get_session()
     with session.begin():
         bdm_ref.save(session=session)
+    return bdm_ref
 
 
 @require_context

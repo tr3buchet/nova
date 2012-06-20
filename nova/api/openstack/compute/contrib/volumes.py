@@ -324,6 +324,7 @@ class VolumeAttachmentController(wsgi.Controller):
 
     def __init__(self):
         self.compute_api = compute.API()
+        self.volume_api = volume.API()
         super(VolumeAttachmentController, self).__init__()
 
     @wsgi.serializers(xml=VolumeAttachmentsTemplate)
@@ -424,8 +425,9 @@ class VolumeAttachmentController(wsgi.Controller):
         except exception.NotFound:
             raise exc.HTTPNotFound()
 
-        bdms = self.compute_api.get_instance_bdms(context, instance)
+        volume = self.volume_api.get(context, volume_id)
 
+        bdms = self.compute_api.get_instance_bdms(context, instance)
         if not bdms:
             LOG.debug(_("Instance %s is not attached."), server_id)
             raise exc.HTTPNotFound()
@@ -433,10 +435,12 @@ class VolumeAttachmentController(wsgi.Controller):
         found = False
         for bdm in bdms:
             if bdm['volume_id'] == volume_id:
-                self.compute_api.detach_volume(context,
-                    volume_id=volume_id)
-                found = True
-                break
+                try:
+                    self.compute_api.detach_volume(context, instance, volume)
+                    found = True
+                    break
+                except exception.VolumeUnattached:
+                    pass
 
         if not found:
             raise exc.HTTPNotFound()
