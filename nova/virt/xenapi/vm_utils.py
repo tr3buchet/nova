@@ -81,6 +81,20 @@ xenapi_vm_utils_opts = [
     cfg.IntOpt('xenapi_num_vbd_unplug_retries',
                default=10,
                help='Maximum number of retries to unplug VBD'),
+    cfg.StrOpt('xenapi_torrent_images',
+               default='none',
+               help='Whether or not to download images via Bit Torrent '
+                    '(all|some|none).'),
+    cfg.StrOpt('xenapi_torrent_base_url',
+               default=None,
+               help='Base URL for torrent files.'),
+    cfg.FloatOpt('xenapi_torrent_seed_chance',
+                 default=1.0,
+                 help='Percent chance that peer will become a seeder.'),
+    cfg.IntOpt('xenapi_torrent_seed_hours',
+               default=0,
+               help='Number of hours after downloading an image via'
+                    ' BitTorrent that it should be seeded for other peers.')
     ]
 
 FLAGS = flags.FLAGS
@@ -906,6 +920,27 @@ def _make_uuid_stack():
     return [str(uuid.uuid4()) for i in xrange(MAX_VDI_CHAIN_SIZE)]
 
 
+def _determine_if_image_uses_bittorrent(context, instance):
+    bittorrent = False
+    xenapi_torrent_images = FLAGS.xenapi_torrent_images.lower()
+
+    if xenapi_torrent_images == 'all':
+        bittorrent = True
+    elif xenapi_torrent_images == 'some':
+        # FIXME(sirp): This should be eager loaded like instance metadata
+        sys_meta = db.instance_system_metadata_get(context,
+                instance['uuid'])
+        try:
+            bittorrent = utils.bool_from_str(sys_meta['image_bittorrent'])
+        except KeyError:
+            pass
+    else:
+        LOG.warning(_("Invalid value '%s' for xenapi_torrent_images"),
+                    xenapi_torrent_images)
+
+    return bittorrent
+
+
 def _fetch_vhd_image(context, session, instance, image_id):
     """Tell glance to download an image and put the VHDs into the SR
 
@@ -920,15 +955,26 @@ def _fetch_vhd_image(context, session, instance, image_id):
               'project_id': context.project_id,
               'auth_token': getattr(context, 'auth_token', None)}
 
-    def pick_glance(params):
-        glance_host, glance_port = glance.pick_glance_api_server()
-        params['glance_host'] = glance_host
-        params['glance_port'] = glance_port
+    if _determine_if_image_uses_bittorrent(context, instance):
+        plugin_name = 'bittorrent'
+        callback = None
+        params['torrent_base_url'] = FLAGS.xenapi_torrent_base_url
+        params['torrent_seed_hours'] = FLAGS.xenapi_torrent_seed_hours
+        params['torrent_seed_chance'] = FLAGS.xenapi_torrent_seed_chance
+    else:
+        plugin_name = 'glance'
+
+        def pick_glance(params):
+            glance_host, glance_port = glance.pick_glance_api_server()
+            params['glance_host'] = glance_host
+            params['glance_port'] = glance_port
+
+        callback = pick_glance
 
     plugin_name = 'glance'
     vdis = _fetch_using_dom0_plugin_with_retry(
             context, session, image_id, plugin_name, params,
-            callback=pick_glance)
+            callback=callback)
 
     sr_ref = safe_find_sr(session)
     _scan_sr(session, sr_ref)

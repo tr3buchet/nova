@@ -1,0 +1,152 @@
+#!/usr/bin/env python
+
+# Copyright (c) 2012 Openstack, LLC
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
+"""Download images via BitTorrent."""
+
+import cPickle as pickle
+try:
+    import json
+except ImportError:
+    import simplejson as json
+import os
+import random
+import shutil
+
+import urllib2
+import XenAPIPlugin
+
+import utils
+
+#FIXME(sirp): should this use pluginlib from 5.6?
+from pluginlib_nova import *
+configure_logging('bittorrent')
+
+DEFAULT_TORRENT_CACHE = '/tmp/torrents'
+DEFAULT_SEED_CACHE = '/tmp/seeds'
+
+
+def _fetch_torrent_file(image_id, torrent_base_url):
+    torrent_cache_path = os.environ.get(
+            'TORRENT_CACHE', DEFAULT_TORRENT_CACHE)
+
+    if not os.path.exists(torrent_cache_path):
+        os.mkdir(torrent_cache_path)
+
+    torrent_path = os.path.join(
+            torrent_cache_path, image_id + '.torrent')
+
+    if not os.path.exists(torrent_path):
+        torrent_url = torrent_base_url + "/%s.torrent" % image_id
+        logging.info("Downloading %s" % torrent_url)
+
+        local_torrent_file = open(torrent_path, 'wb')
+        try:
+            remote_torrent_file = urllib2.urlopen(torrent_url)
+            shutil.copyfileobj(remote_torrent_file, local_torrent_file)
+        finally:
+            local_torrent_file.close()
+
+    return torrent_path
+
+
+def _ctorrent(torrent_path, save_as_path, torrent_seed_hours=None,
+              daemon=False):
+    torrent_cmd = "ctorrent %(torrent_path)s -s %(save_as_path)s" % locals()
+
+    if torrent_seed_hours is not None:
+        torrent_cmd += " -e %d" % torrent_seed_hours
+
+    if daemon:
+        torrent_cmd += " -d"
+
+    # NOTE(sirp): stdout must be set here otherwise XML parsing breaks.
+    torrent_proc = utils.make_subprocess(torrent_cmd, stdout=True)
+    utils.finish_subprocess(torrent_proc, torrent_cmd)
+
+
+def _download_via_bittorrent(torrent_path, tarball_path, torrent_seed_hours,
+                              torrent_seed_chance):
+    _ctorrent(torrent_path, tarball_path, torrent_seed_hours=0)
+
+    if torrent_seed_hours and random.random() <= torrent_seed_chance:
+        seed_cache_path = os.environ.get('SEED_CACHE', DEFAULT_SEED_CACHE)
+
+        if not os.path.exists(seed_cache_path):
+            os.mkdir(seed_cache_path)
+
+        # Make a copy of the file so that we can seed it
+        seed_filename = os.path.basename(tarball_path)
+        seed_path = os.path.join(seed_cache_path, seed_filename)
+        shutil.copyfile(tarball_path, seed_path)
+
+        # Daemonize and seed the image
+        # TODO(sirp): we should delete the file once the seed process dies
+        _ctorrent(torrent_path, seed_path,
+                  torrent_seed_hours=torrent_seed_hours, daemon=True)
+
+    return tarball_path
+
+
+def _extract_tarball(tarball_path, staging_path):
+    """Extract the tarball into the staging directory."""
+    tarball_fileobj = open(tarball_path, 'rb')
+    try:
+        utils.extract_tarball(tarball_fileobj, staging_path)
+    finally:
+        tarball_fileobj.close()
+        os.unlink(tarball_path)
+
+
+def download_vhd(session, args):
+    """Download an image from BitTorrent, unbundle it, and then deposit the
+    VHDs into the storage repository
+    """
+    params = pickle.loads(exists(args, 'params'))
+    image_id = str(params["image_id"])
+    torrent_base_url = params["torrent_base_url"]
+    torrent_seed_hours = params["torrent_seed_hours"]
+    torrent_seed_chance = params["torrent_seed_chance"]
+    uuid_stack = params["uuid_stack"]
+    sr_path = params["sr_path"]
+
+    torrent_path = _fetch_torrent_file(image_id, torrent_base_url)
+
+    staging_path = utils.make_staging_area(sr_path)
+    try:
+        tarball_filename = os.path.basename(torrent_path).replace(
+                '.torrent', '')
+        tarball_path = os.path.join(staging_path, tarball_filename)
+
+        # Download tarball into staging area
+        _download_via_bittorrent(
+                torrent_path, tarball_path, torrent_seed_hours,
+                torrent_seed_chance)
+
+        # Extract the tarball into the staging area
+        _extract_tarball(tarball_path, staging_path)
+
+        # Move the VHDs from the staging area into the storage repository
+        vdi_list = utils.import_vhds(sr_path, staging_path, uuid_stack)
+    finally:
+        utils.cleanup_staging_area(staging_path)
+
+    # Right now, it's easier to return a single string via XenAPI,
+    # so we'll json encode the list of VHDs.
+    return json.dumps(vdi_list)
+
+
+if __name__ == '__main__':
+    XenAPIPlugin.dispatch({'download_vhd': download_vhd})
