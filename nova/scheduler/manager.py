@@ -22,6 +22,7 @@ Scheduler Service
 """
 
 import functools
+import sys
 
 from nova.compute import vm_states
 from nova import db
@@ -35,6 +36,7 @@ from nova.openstack.common import importutils
 from nova.openstack.common import log as logging
 from nova.openstack.common.notifier import api as notifier
 from nova import quota
+from nova import utils
 
 
 LOG = logging.getLogger(__name__)
@@ -163,6 +165,7 @@ class SchedulerManager(manager.Manager):
         # The refactoring could go further but trying to minimize changes
         # for essex timeframe
 
+        exc_info = sys.exc_info()
         LOG.warning(_("Failed to schedule_%(method)s: %(ex)s") % locals())
 
         vm_state = updates['vm_state']
@@ -171,6 +174,9 @@ class SchedulerManager(manager.Manager):
         instance_uuid = properties.get('uuid', {})
 
         if instance_uuid:
+            values = utils.create_instance_fault_from_exc(context,
+                    instance_uuid, ex, exc_info)
+            self.db.instance_fault_create(context, values)
             state = vm_state.upper()
             LOG.warning(_('Setting instance to %(state)s state.'), locals(),
                         instance_uuid=instance_uuid)
