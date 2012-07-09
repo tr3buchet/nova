@@ -77,6 +77,7 @@ def _fake_networks(network_count, tenant_id):
     network_id is the id from quantum. Dumb"""
     return [{'id': str(nova.utils.gen_uuid()),
              'name': 'net%d' % i,
+             'cidr': '10.0.0.0/8',
              'network_id': str(nova.utils.gen_uuid()),
              'tenant_id': tenant_id} for i in xrange(network_count)]
 
@@ -155,12 +156,6 @@ def _get_quantum_tenant_nets_stub(networks):
     return get_nets
 
 
-def _net_from_quantum_stub(network):
-    def get_net(net_tenant, quantum_cache):
-        return network
-    return get_net
-
-
 def _normalize_network_stub(label):
     def normalize(net):
         net['label'] = label
@@ -211,6 +206,115 @@ class QuantumPrimeManagerInterfaceTests(test.TestCase):
 
     def test_init_host(self):
         self.net_manager.init_host()
+
+
+class Quantum2ManagerTestsAllocateForInstanceGlobalIDs(test.TestCase):
+    def setUp(self):
+        super(Quantum2ManagerTestsAllocateForInstanceGlobalIDs, self).setUp()
+
+        self._old_flag = FLAGS.network_global_uuid_label_map
+        FLAGS.network_global_uuid_label_map = [
+                '00000000-0000-0000-0000-000000000000', 'public',
+                '11111111-1111-1111-1111-111111111111', 'private']
+
+        self.tenant_id = 'project1'
+        self.context = context.RequestContext(user_id=1,
+                                              project_id=self.tenant_id)
+        self.q_client = ('nova.network.quantum.quantum_connection.'
+                         'QuantumClientConnection')
+        self.m_client = ('nova.network.quantum2.melange_connection.'
+                         'MelangeConnection')
+
+        self.default_networks = _fake_networks(2, self.tenant_id)
+
+        def iterlabel():
+            for label in ['public', 'private']:
+                yield label
+        self.label_toggler = iterlabel()
+
+        def pub_priv(s, network):
+            network = {'id': network['network_id'],
+                       'cidr': network['cidr']}
+            try:
+                network['label'] = self.label_toggler.next()
+            except StopIteration:
+                self.label_toggler = iterlabel()
+                network['label'] = self.label_toggler.next()
+
+            return network
+
+        self.stubs.Set(manager.QuantumManager, '_normalize_network', pub_priv)
+        self.stubs.Set(melange_connection.MelangeConnection,
+                       'get_networks_for_tenant',
+                       lambda *args, **kwargs: self.default_networks)
+        self.net_manager = manager.QuantumManager()
+        self.normalized_networks = [self.net_manager._normalize_network(n)
+                                    for n in self.default_networks]
+
+    def tearDown(self):
+        FLAGS.network_global_uuid_label_map = self._old_flag
+        super(Quantum2ManagerTestsAllocateForInstanceGlobalIDs,
+              self).tearDown()
+
+    def test_nw_map(self):
+        pub_uuid = [nw['id'] for nw in self.normalized_networks
+                             if nw['label'] == 'public'][0]
+        priv_uuid = [nw['id'] for nw in self.normalized_networks
+                              if nw['label'] == 'private'][0]
+        should_be = {'00000000-0000-0000-0000-000000000000': pub_uuid,
+                     '11111111-1111-1111-1111-111111111111': priv_uuid,
+                     pub_uuid: '00000000-0000-0000-0000-000000000000',
+                     priv_uuid: '11111111-1111-1111-1111-111111111111'}
+        self.assertEqual(self.net_manager._nw_map, should_be)
+
+    def test_get_all_networks(self):
+        nets = self.net_manager.get_all_networks(self.context)
+        should_be = self.normalized_networks
+        for nw in should_be:
+            if nw['label'] == 'public':
+                nw['id'] = '00000000-0000-0000-0000-000000000000'
+            elif nw['label'] == 'private':
+                nw['id'] = '11111111-1111-1111-1111-111111111111'
+        self.assertEqual(nets, should_be)
+
+    def test_allocate_for_instance_with_global_requested_nets(self):
+        with contextlib.nested(
+            mock.patch.object(self.net_manager, '_vifs_to_model'),
+            mock.patch(self.q_client + '.create_and_attach_port'),
+            mock.patch(self.m_client + '.get_networks_for_tenant'),
+            mock.patch(self.m_client + '.allocate_for_instance_networks'),
+            ) as (vifs_to_model,
+                  create_and_attach,
+                  get_networks_for_tenant,
+                  allocate_for_instance_networks):
+
+            # only take the first network for the test
+            networks = _fake_networks(2, self.tenant_id)
+            expected_networks = networks[:1]
+            requested_networks = [n['network_id']
+                                  for n in expected_networks]
+            requested_networks.append('0000000000-0000-0000-0000-000000000000')
+
+            vifs = [_vif_helper(self.tenant_id, n['network_id'])
+                    for n in expected_networks]
+            get_networks_for_tenant.return_value = networks
+            allocate_for_instance_networks.return_value = vifs
+
+            instance_id = 1
+            kwargs = dict(instance_id=instance_id,
+                          rxtx_factor=1,
+                          project_id='project1',
+                          requested_networks=[requested_networks],
+                          host='host')
+
+            self.net_manager.allocate_for_instance(self.context, **kwargs)
+
+            args = (self.tenant_id,
+                    instance_id,
+                    [{'id': n['network_id'], 'tenant_id': n['tenant_id']}
+                      for n in expected_networks])
+            allocate_for_instance_networks.assert_called_once_with(*args)
+            self.assertTrue(create_and_attach.called)
 
 
 class Quantum2ManagerTestsAllocateForInstance(test.TestCase):
@@ -671,16 +775,16 @@ class Quantum2ManagerGetInstanceNwInfo(test.TestCase):
 
         with contextlib.nested(
             mock.patch(self.m_client + '.get_allocated_networks'),
-            mock.patch.object(net_manager, '_net_from_quantum'),
+            mock.patch.object(net_manager, '_get_quantum_tenant_nets'),
             ) as (get_allocated_networks,
-                  net_from_quantum):
+                  get_quantum_tenant_nets):
 
             networks = _fake_networks(2, tenant_id)
             vifs = [_vif_helper(tenant_id, n['network_id'])
                     for n in networks]
 
             get_allocated_networks.return_value = vifs
-            net_from_quantum.return_value = networks
+            get_quantum_tenant_nets.return_value = networks
 
             get_nw_info = net_manager.get_instance_nw_info
             res = get_nw_info(ctx, instance_id=1, project_id=tenant_id)
@@ -841,25 +945,6 @@ class Quantum2ManagerQuantumTenantNets(test.TestCase):
         self.assertEquals(res, networks['networks'])
 
 
-class Quantum2ManagerNetFromQuantum(test.TestCase):
-    def setUp(self):
-        super(Quantum2ManagerNetFromQuantum, self).setUp()
-        self.tenant_id = 'project1'
-        self.net_manager = manager.QuantumManager()
-        self.networks = {self.tenant_id: 'from_quantum'}
-        self.stubs.Set(self.net_manager, '_get_quantum_tenant_nets',
-                       _get_quantum_tenant_nets_stub(self.networks))
-
-    def test_nets_from_quantum(self):
-        net = {self.tenant_id: 'from_cache'}
-        res = self.net_manager._net_from_quantum(self.tenant_id, net)
-        self.assertEquals('from_cache', res)
-
-    def test_nets_from_quantum_no_cache(self):
-        res = self.net_manager._net_from_quantum(self.tenant_id, {})
-        self.assertEquals('from_quantum', res)
-
-
 class Quantum2ManagerVifFromNetwork(test.TestCase):
     def setUp(self):
         super(Quantum2ManagerVifFromNetwork, self).setUp()
@@ -908,8 +993,8 @@ class Quantum2ManagerVifsToModel(test.TestCase):
                                 _ips_from_vif_stub(ips_per_vif=2,
                                           tenants=['project1'],
                                           networks=self.networks))
-        stub(self.net_manager, '_net_from_quantum',
-             _net_from_quantum_stub([self.networks[0]]))
+        stub(self.net_manager, '_get_quantum_tenant_nets',
+                lambda tenant: self.networks)
         self.vif = _vif_helper(self.tenant_id, self.networks[0]['id'])
 
     def test_vifs_to_model_no_network_ids_fails(self):
@@ -950,8 +1035,6 @@ class Quantum2ManagerVifsToModel(test.TestCase):
 
     def test_vifs_to_model_no_labels(self):
         self.networks[0].pop('name')
-        self.stubs.Set(self.net_manager, '_net_from_quantum',
-             _net_from_quantum_stub([self.networks[0]]))
         res = self.net_manager._vifs_to_model([self.vif])
         net_id = self.networks[0]['network_id']
         self.assertEquals(res[0]['network']['label'], 'net-%s' % net_id)

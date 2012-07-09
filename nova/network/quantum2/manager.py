@@ -17,6 +17,7 @@
 
 import functools
 import re
+import uuid
 
 import netaddr
 
@@ -32,7 +33,6 @@ from nova.openstack.common import cfg
 from nova.openstack.common import excutils
 from nova.openstack.common import importutils
 from nova.openstack.common import log as logging
-from nova import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -61,6 +61,9 @@ quantum2_opts = [
     cfg.BoolOpt('quantum_cache_tenant_networks',
                 default=True,
                 help='Whether or not to cache quantum tenant networks'),
+    cfg.ListOpt('network_global_uuid_label_map',
+                default=[],
+                help='List of uuid,label,uuid,label... for default networks'),
     ]
 
 FLAGS.register_opts(quantum2_opts)
@@ -103,10 +106,53 @@ class QuantumManager(manager.SchedulerDependentManager):
 
         self.q_conn = quantum_connection.QuantumClientConnection()
         self.m_conn = melange_connection.MelangeConnection()
-        self.net_info_cache = {}
+
+        # NOTE(tr3buchet): this cache is a hack
+        self._quantum_tenant_nw_cache = {}
+
+        # NOTE(tr3buchet): map for global uuids
+        #                  if these should change, restart this service
+        # self._nw_map will look like:
+        # self._nw_map = {'0000000000-0000-0000-0000-000000000000': pub_uuid,
+        #                 '1111111111-1111-1111-1111-111111111111': priv_uuid,
+        #                 pub_uuid: '0000000000-0000-0000-0000-000000000000',
+        #                 priv_uuid: '1111111111-1111-1111-1111-111111111111'}
+        # there will be only one (each way) entry per label
+        self._nw_map = {}
+        if FLAGS.network_global_uuid_label_map:
+            self._nw_map = self._get_nw_map()
+            LOG.debug('the self._nw_map is |%s|' % self._nw_map)
+        else:
+            self._nw_map = {}
 
         super(QuantumManager, self).__init__(service_name='network',
                                              *args, **kwargs)
+
+    def _get_nw_map(self):
+        the_map = {}
+        # get default networks
+        q_default_tenant_id = FLAGS.quantum_default_tenant_id
+        networks = self.m_conn.get_networks_for_tenant(q_default_tenant_id)
+        networks = [self._normalize_network(network)
+                    for network in networks]
+
+        # make a key=label, value=uuid dictionary from the flag
+        flag_dict = {}
+        f = iter(FLAGS.network_global_uuid_label_map)
+        while True:
+            try:
+                flag_dict[f.next()] = f.next()
+            except StopIteration:
+                break
+
+        # build a birectional map of global uuid to specific network uuid
+        for nw in networks:
+            if nw['label'] in flag_dict:
+                global_uuid = str(uuid.UUID(flag_dict[nw['label']]))
+                if global_uuid not in the_map:
+                    the_map[global_uuid] = nw['id']
+                    the_map[nw['id']] = global_uuid
+        return the_map
 
     def init_host(self):
         pass
@@ -190,8 +236,10 @@ class QuantumManager(manager.SchedulerDependentManager):
     # FIXME(jkoelker) Quantum client needs to be updated, until Folsom
     #                is open do this here.
     def _get_quantum_tenant_nets(self, tenant_id):
-        if tenant_id in self.net_info_cache:
-            return self.net_info_cache[tenant_id]
+        # NOTE(tr3buchet): this is a hack
+        if (FLAGS.quantum_cache_tenant_networks and
+                tenant_id in self._quantum_tenant_nw_cache):
+            return self._quantum_tenant_nw_cache[tenant_id]
 
         client = self.q_conn.client
         # NOTE(jkoelker) Really?
@@ -213,11 +261,11 @@ class QuantumManager(manager.SchedulerDependentManager):
         # NOTE(jkoelker) Yes, really.
         client.format = format
         client.tenant = tenant
-        # FIXME(comstud): Hack to cache this.  We'll need to make this
-        # better, because it'll leak memory over time as-is.  Should
-        # convert this to use nova/common/memorycache.py?
+
+        # NOTE(tr3buchet): this is a hack
         if FLAGS.quantum_cache_tenant_networks:
-            self.net_info_cache[tenant_id] = result
+            self._quantum_tenant_nw_cache[tenant_id] = result
+
         return result
 
     def _normalize_network(self, network):
@@ -230,6 +278,7 @@ class QuantumManager(manager.SchedulerDependentManager):
                                                  network['network_id'])
             net['label'] = label
         except Exception:
+            LOG.exception(_('label not returned'))
             net['label'] = 'UKNOWN'
 
         return net
@@ -266,19 +315,11 @@ class QuantumManager(manager.SchedulerDependentManager):
         return model.VIF(id=m_vif['id'], address=m_vif['mac_address'],
                          network=network)
 
-    def _net_from_quantum(self, network_tenant_id, quantum_network_cache):
-        q_nets = quantum_network_cache.get(network_tenant_id)
-        if not q_nets:
-            q_nets = self._get_quantum_tenant_nets(network_tenant_id)
-            quantum_network_cache[network_tenant_id] = q_nets
-        return q_nets
-
     def _vifs_to_model(self, melange_vifs, skip_broken_vifs=False):
         nw_info = model.NetworkInfo()
         # NOTE(jkoelker) This allows us to call quantum in the loop
         #                but only once per tenant_id. Keys are tenant_id
         #                value is list of networks
-        quantum_network_cache = {}
 
         for m_vif in melange_vifs:
             (ips,
@@ -298,8 +339,7 @@ class QuantumManager(manager.SchedulerDependentManager):
             network_tenant_id = network_tenant_ids.pop()
             network_id = network_ids.pop()
 
-            q_nets = self._net_from_quantum(network_tenant_id,
-                                            quantum_network_cache)
+            q_nets = self._get_quantum_tenant_nets(network_tenant_id)
             labels = set([n['name'] for n in q_nets
                           if n['id'] == network_id])
             if not labels:
@@ -340,8 +380,9 @@ class QuantumManager(manager.SchedulerDependentManager):
         q_default_tenant_id = FLAGS.quantum_default_tenant_id
         networks = self.m_conn.get_networks_for_tenant(q_default_tenant_id)
         if requested_networks:
+            requested_networks = [self._nw_map.get(rn[0]) or rn[0]
+                                  for rn in requested_networks]
             networks.extend(self.m_conn.get_networks_for_tenant(tenant_id))
-            requested_networks = [r_n[0] for r_n in requested_networks]
             networks = [n for n in networks
                         if n['network_id'] in requested_networks]
 
@@ -429,6 +470,10 @@ class QuantumManager(manager.SchedulerDependentManager):
                                                network_id,
                                                policy_id=policy['id'],
                                                gateway=gateway)
+        # NOTE(tr3buchet): this is a hack
+        # next retrieve will refresh, then with the new network in place
+        self._quantum_tenant_nw_cache.pop(tenant_id, None)
+
         # TODO(jkoelker) figure the return form
         return [self._normalize_network(ip_block)]
 
@@ -501,10 +546,20 @@ class QuantumManager(manager.SchedulerDependentManager):
             LOG.exception(_("Melange block deletion failed"))
             raise
 
+        # NOTE(tr3buchet): this is a hack
+        # next retrieve will refresh, then with the network gone
+        self._quantum_tenant_nw_cache.pop(tenant_id, None)
+
     def get_all_networks(self, context):
         tenant_id = context.project_id
         networks = self.m_conn.get_networks_for_tenant(tenant_id)
-        return [self._normalize_network(network) for network in networks]
+        networks = [self._normalize_network(network) for network in networks]
+
+        if FLAGS.network_global_uuid_label_map:
+            for nw in networks:
+                nw['id'] = self._nw_map.get(nw['id']) or nw['id']
+
+        return networks
 
     # NOTE(jkoelker) Accept **kwargs, for the bass ackwards compat. Dont use
     #                them.
