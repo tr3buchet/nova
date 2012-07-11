@@ -1292,6 +1292,11 @@ class ComputeManager(manager.SchedulerDependentManager):
         instance_ref = self.db.instance_get_by_uuid(context,
                 migration_ref.instance_uuid)
 
+        # NOTE(comstud): A revert_resize is essentially a resize back to
+        # the old size, so we need to send a usage event here.
+        compute_utils.notify_usage_exists(
+                context, instance_ref, current_period=True)
+
         try:
             self._revert_resize(context, instance_ref, migration_ref)
         except Exception, error:
