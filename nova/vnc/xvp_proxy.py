@@ -135,6 +135,22 @@ class XCPVNCProxy(object):
         try:
             req = webob.Request(environ)
             LOG.audit(_("Request: %s"), req)
+
+            if req.path_info == "/crossdomain.xml":
+                LOG.audit(_("Serving crossdomain.xml file"))
+                start_response('200 OK', [('Content-type', 'text/xmlj')])
+                xml = '<?xml version="1.0"?>\n' + \
+                      '<!DOCTYPE cross-domain-policy SYSTEM ' + \
+                        '"http://www.macromedia.com/xml/dtds/' + \
+                        'cross-domain-policy.dtd">\n' + \
+                        '<cross-domain-policy>\n' + \
+                        '  <allow-access-from domain="*"/>\n' + \
+                        '  <site-control permitted-cross-domain-policies=' + \
+                             '"master-only"/>\n' + \
+                        '</cross-domain-policy>\n'
+                return [xml]
+
+            # Proxy to VNC:
             token = req.params.get('token')
             if not token:
                 LOG.audit(_("Request made with missing token: %s"), req)
