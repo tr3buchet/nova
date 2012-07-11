@@ -1111,9 +1111,9 @@ class ComputeTestCase(BaseTestCase):
 
         password = "new_password"
 
-        self.compute._rebuild_instance(self.context, inst_ref['uuid'],
+        self.compute.rebuild_instance(self.context, inst_ref['uuid'],
                 image_ref, new_image_ref, orig_sys_metadata,
-                dict(new_pass=password))
+                new_pass=password)
 
         instance = db.instance_get_by_uuid(self.context, inst_ref['uuid'])
 

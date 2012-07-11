@@ -867,21 +867,6 @@ class ComputeManager(manager.SchedulerDependentManager):
         :param injected_files: Files to inject
         :param new_pass: password to set on rebuilt instance
         """
-        try:
-            self._rebuild_instance(context, instance_uuid, orig_image_ref,
-                    image_ref, orig_sys_metadata, kwargs)
-        except exception.ImageNotFound:
-            LOG.error(_('Cannot rebuild instance because the given image does '
-                        'not exist.'),
-                      context=context, instance_uuid=instance_uuid)
-            self._set_instance_error_state(context, instance_uuid)
-        except Exception as exc:
-            LOG.error(_('Cannot rebuild instance: %(exc)s'), locals(),
-                      context=context, instance_uuid=instance_uuid)
-            self._set_instance_error_state(context, instance_uuid)
-
-    def _rebuild_instance(self, context, instance_uuid, orig_image_ref,
-            image_ref, orig_sys_metadata, kwargs):
         context = context.elevated()
 
         LOG.audit(_("Rebuilding instance"), context=context,
@@ -902,6 +887,29 @@ class ComputeManager(manager.SchedulerDependentManager):
         self._notify_about_instance_usage(context, instance,
                 "rebuild.start")
 
+        try:
+            network_info = self._rebuild_instance(context, instance,
+                    orig_image_ref, image_ref, kwargs)
+        except Exception as exc:
+            with excutils.save_and_reraise_exception():
+                LOG.error(_('Cannot rebuild instance: %(exc)s'), locals(),
+                          context=context, instance_uuid=instance_uuid)
+                self._set_instance_error_state(context, instance_uuid)
+
+        current_power_state = self._get_power_state(context, instance)
+        instance = self._instance_update(context,
+                                         instance_uuid,
+                                         power_state=current_power_state,
+                                         vm_state=vm_states.ACTIVE,
+                                         task_state=None,
+                                         launched_at=timeutils.utcnow())
+
+        self._notify_about_instance_usage(context, instance, "rebuild.end",
+                                          network_info=network_info)
+
+    def _rebuild_instance(self, context, instance, orig_image_ref,
+            image_ref, kwargs):
+        instance_uuid = instance['uuid']
         current_power_state = self._get_power_state(context, instance)
         self._instance_update(context,
                               instance_uuid,
@@ -934,16 +942,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         self.driver.spawn(context, instance, image_meta,
                           self._legacy_nw_info(network_info), device_info)
 
-        current_power_state = self._get_power_state(context, instance)
-        instance = self._instance_update(context,
-                                         instance_uuid,
-                                         power_state=current_power_state,
-                                         vm_state=vm_states.ACTIVE,
-                                         task_state=None,
-                                         launched_at=timeutils.utcnow())
-
-        self._notify_about_instance_usage(context, instance, "rebuild.end",
-                                          network_info=network_info)
+        return network_info
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
@@ -1269,6 +1268,16 @@ class ComputeManager(manager.SchedulerDependentManager):
             context, instance_ref, "resize.confirm.end",
             network_info=network_info)
 
+    def _revert_resize(self, context, instance_ref, migration_ref):
+        # NOTE(tr3buchet): tear down networks on destination host
+        self.network_api.setup_networks_on_host(context, instance_ref,
+                                                         teardown=True)
+
+        network_info = self._get_instance_nw_info(context, instance_ref)
+        self.driver.destroy(instance_ref, self._legacy_nw_info(network_info))
+        self.compute_rpcapi.finish_revert_resize(context, instance_ref,
+                migration_ref['id'], migration_ref['source_compute'])
+
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
     @wrap_instance_fault
@@ -1283,28 +1292,15 @@ class ComputeManager(manager.SchedulerDependentManager):
         instance_ref = self.db.instance_get_by_uuid(context,
                 migration_ref.instance_uuid)
 
-        # NOTE(tr3buchet): tear down networks on destination host
-        self.network_api.setup_networks_on_host(context, instance_ref,
-                                                         teardown=True)
+        try:
+            self._revert_resize(context, instance_ref, migration_ref)
+        except Exception, error:
+            with excutils.save_and_reraise_exception():
+                LOG.error(_('%s. Setting instance vm_state to ERROR') % error,
+                        instance=instance_ref)
+                self._set_instance_error_state(context, instance_ref.uuid)
 
-        network_info = self._get_instance_nw_info(context, instance_ref)
-        self.driver.destroy(instance_ref, self._legacy_nw_info(network_info))
-        self.compute_rpcapi.finish_revert_resize(context, instance_ref,
-                migration_ref['id'], migration_ref['source_compute'])
-
-    @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
-    @checks_instance_lock
-    @wrap_instance_fault
-    def finish_revert_resize(self, context, instance_uuid, migration_id):
-        """Finishes the second half of reverting a resize.
-
-        Power back on the source instance and revert the resized attributes
-        in the database.
-
-        """
-        migration_ref = self.db.migration_get(context, migration_id)
-        instance_ref = self.db.instance_get_by_uuid(context,
-                migration_ref.instance_uuid)
+    def _finish_revert_resize(self, context, instance_ref, migration_ref):
         network_info = self._get_instance_nw_info(context, instance_ref)
 
         self._notify_about_instance_usage(
@@ -1330,7 +1326,7 @@ class ComputeManager(manager.SchedulerDependentManager):
                               vm_state=vm_states.ACTIVE,
                               task_state=None)
 
-        self.db.migration_update(context, migration_id,
+        self.db.migration_update(context, migration_ref['id'],
                 {'status': 'reverted'})
 
         self._notify_about_instance_usage(
@@ -1339,25 +1335,28 @@ class ComputeManager(manager.SchedulerDependentManager):
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
     @wrap_instance_fault
-    def prep_resize(self, context, instance_uuid, instance_type_id, image,
-                    **kwargs):
-        """Initiates the process of moving a running instance to another host.
+    def finish_revert_resize(self, context, instance_uuid, migration_id):
+        """Finishes the second half of reverting a resize.
 
-        Possibly changes the RAM and disk size in the process.
+        Power back on the source instance and revert the resized attributes
+        in the database.
 
         """
-        context = context.elevated()
+        migration_ref = self.db.migration_get(context, migration_id)
+        instance_ref = self.db.instance_get_by_uuid(context,
+                migration_ref.instance_uuid)
 
-        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
+        try:
+            self._finish_revert_resize(context, instance_ref, migration_ref)
+        except Exception, error:
+            with excutils.save_and_reraise_exception():
+                LOG.error(_('%s. Setting instance vm_state to ERROR') % error,
+                        instance=instance_ref)
+                self._set_instance_error_state(context, instance_ref.uuid)
 
-        compute_utils.notify_usage_exists(
-                context, instance_ref, current_period=True)
-        self._notify_about_instance_usage(
-                context, instance_ref, "resize.prep.start")
-
+    def _prep_resize(self, context, instance_ref, instance_type_id, image):
         same_host = instance_ref['host'] == FLAGS.host
         if same_host and not FLAGS.allow_resize_to_same_host:
-            self._set_instance_error_state(context, instance_uuid)
             msg = _('destination same as source!')
             raise exception.MigrationError(msg)
 
@@ -1389,46 +1388,55 @@ class ComputeManager(manager.SchedulerDependentManager):
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
     @wrap_instance_fault
-    def resize_instance(self, context, instance_uuid, migration_id, image):
-        """Starts the migration of a running instance to another host."""
-        migration_ref = self.db.migration_get(context, migration_id)
-        instance_ref = self.db.instance_get_by_uuid(context,
-                migration_ref.instance_uuid)
+    def prep_resize(self, context, instance_uuid, instance_type_id, image,
+                    **kwargs):
+        """Initiates the process of moving a running instance to another host.
+
+        Possibly changes the RAM and disk size in the process.
+
+        """
+        context = context.elevated()
+
+        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
+
+        compute_utils.notify_usage_exists(
+                context, instance_ref, current_period=True)
+        self._notify_about_instance_usage(
+                context, instance_ref, "resize.prep.start")
+
+        try:
+            self._prep_resize(context, instance_ref, instance_type_id,
+                    image)
+        except Exception, error:
+            with excutils.save_and_reraise_exception():
+                LOG.error(_('%s. Setting instance vm_state to ERROR') % error,
+                        instance=instance_ref)
+                self._set_instance_error_state(context, instance_ref.uuid)
+
+    def _resize_instance(self, context, instance_ref, migration_ref, image):
+        instance_uuid = instance_ref['uuid']
+        migration_id = migration_ref['id']
         instance_type_ref = self.db.instance_type_get(context,
                 migration_ref.new_instance_type_id)
 
-        try:
-            network_info = self._get_instance_nw_info(context, instance_ref)
-        except Exception, error:
-            with excutils.save_and_reraise_exception():
-                msg = _('%s. Setting instance vm_state to ERROR')
-                LOG.error(msg % error)
-                self._set_instance_error_state(context, instance_uuid)
+        network_info = self._get_instance_nw_info(context, instance_ref)
 
         self.db.migration_update(context,
                                  migration_id,
                                  {'status': 'migrating'})
-
         self._instance_update(context, instance_uuid,
                               task_state=task_states.RESIZE_MIGRATING)
 
         self._notify_about_instance_usage(
             context, instance_ref, "resize.start", network_info=network_info)
 
-        try:
-            disk_info = self.driver.migrate_disk_and_power_off(
-                    context, instance_ref, migration_ref['dest_host'],
-                    instance_type_ref, self._legacy_nw_info(network_info))
-        except Exception, error:
-            with excutils.save_and_reraise_exception():
-                LOG.error(_('%s. Setting instance vm_state to ERROR') % error,
-                          instance=instance_ref)
-                self._set_instance_error_state(context, instance_uuid)
+        disk_info = self.driver.migrate_disk_and_power_off(
+                context, instance_ref, migration_ref['dest_host'],
+                instance_type_ref, self._legacy_nw_info(network_info))
 
         self.db.migration_update(context,
                                  migration_id,
                                  {'status': 'post-migrating'})
-
         self._instance_update(context, instance_uuid,
                               task_state=task_states.RESIZE_MIGRATED)
 
@@ -1437,6 +1445,24 @@ class ComputeManager(manager.SchedulerDependentManager):
 
         self._notify_about_instance_usage(context, instance_ref, "resize.end",
                                           network_info=network_info)
+
+    @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
+    @checks_instance_lock
+    @wrap_instance_fault
+    def resize_instance(self, context, instance_uuid, migration_id, image):
+        """Starts the migration of a running instance to another host."""
+        migration_ref = self.db.migration_get(context, migration_id)
+        instance_ref = self.db.instance_get_by_uuid(context,
+                migration_ref.instance_uuid)
+
+        try:
+            self._resize_instance(context, instance_ref, migration_ref,
+                    image)
+        except Exception, error:
+            with excutils.save_and_reraise_exception():
+                msg = _('%s. Setting instance vm_state to ERROR')
+                LOG.error(msg % error)
+                self._set_instance_error_state(context, instance_uuid)
 
     def _finish_resize(self, context, instance_ref, migration_ref, disk_info,
                        image):
