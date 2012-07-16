@@ -45,6 +45,7 @@ class ViewBuilder(object):
         """
         limit_names = {
             "ram": ["maxTotalRAMSize"],
+            "networks": ["maxTotalPrivateNetworks"],
             "instances": ["maxTotalInstances"],
             "cores": ["maxTotalCores"],
             "gigabytes": ["maxTotalVolumeGigabytes"],
