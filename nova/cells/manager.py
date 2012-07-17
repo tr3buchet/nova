@@ -37,6 +37,7 @@ from nova import flags
 from nova import manager
 from nova import network
 from nova.openstack.common import cfg
+from nova.openstack.common import excutils
 from nova.openstack.common import importutils
 from nova.openstack.common import log as logging
 from nova.openstack.common import rpc
@@ -625,7 +626,7 @@ class CellsManager(manager.Manager):
                 routing_path=routing_path, **kwargs)
 
     def run_service_api_method(self, context, service_name, method_info,
-            routing_path=None, **kwargs):
+            is_broadcast=False, routing_path=None, **kwargs):
         """Caller wants us to call a method in a service API"""
         api = self.api_map.get(service_name)
         if not api:
@@ -637,13 +638,31 @@ class CellsManager(manager.Manager):
             detail = _("Unknown method '%(method)s' in %(service_name)s "
                     "API") % locals()
             raise exception.CellServiceAPIMethodNotFound(detail=detail)
-        # FIXME(comstud): Make more generic later.  Finish 'volume' and
-        # 'network' service code
         args = list(method_info['method_args'])
+
+        def _broadcast_instance_destroy(instance_uuid):
+            instance = {'uuid': instance_uuid}
+            bcast_msg = cells_utils.form_instance_destroy_broadcast_message(
+                    instance)
+            self.broadcast_message(context, **bcast_msg['args'])
+
+        # FIXME(comstud): Make more generic later.  Finish 'volume' code
         if service_name == 'compute':
             # 1st arg is instance_uuid that we need to turn into the
             # instance object.
-            instance = db.instance_get_by_uuid(context, args[0])
+            instance_uuid = args[0]
+            try:
+                instance = db.instance_get_by_uuid(context, instance_uuid)
+            except exception.InstanceNotFound:
+                # Kick an instance_destroy update to the top if it's not
+                # a broadcast message, since we must have gotten out of
+                # sync..
+                if is_broadcast:
+                    LOG.info(_("Ignoring unknown instance in broadcast "
+                        "message"), instance_uuid=instance_uuid)
+                    return
+                with excutils.save_and_reraise_exception():
+                    _broadcast_instance_destroy(instance_uuid)
             args[0] = instance
         return fn(context, *args, **method_info['method_kwargs'])
 
@@ -774,12 +793,17 @@ class CellsManager(manager.Manager):
         LOG.debug(_("Got update for instance %(instance_uuid)s: "
                 "%(instance_info)s") % locals())
         info_cache = instance_info.pop('info_cache', None)
-        try:
-            self.db.instance_update(context, instance_uuid, instance_info,
-                    update_cells=False)
-        except exception.NotFound:
-            # Strange.
-            self.db.instance_create(context, instance_info)
+        # It's possible due to some weird condition that the instance
+        # was already set as deleted... so we'll attempt to update
+        # it with permissions that allows us to read deleted.
+        with utils.temporary_mutation(context, read_deleted="yes"):
+            try:
+                self.db.instance_update(context, instance_uuid,
+                        instance_info, update_cells=False)
+            except exception.NotFound:
+                # FIXME(comstud): Strange.  Need to handle quotas here,
+                # if we actually want this code to remain..
+                self.db.instance_create(context, instance_info)
         if info_cache:
             self.db.instance_info_cache_update(context, instance_uuid,
                     info_cache)

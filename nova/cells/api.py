@@ -41,11 +41,23 @@ def cell_cast(context, cell_name, method, **kwargs):
     rpc.cast(context, FLAGS.cells_topic, routing_message)
 
 
-def cell_broadcast_up(context, method, **kwargs):
-    """Broadcast a message upwards."""
-    bcast_message = cells_utils.form_broadcast_message('up', method,
+def cell_broadcast(context, direction, method, **kwargs):
+    """Route a cast to a specific cell."""
+    bcast_message = cells_utils.form_broadcast_message(direction, method,
             kwargs)
     rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
+def broadcast_service_api_method(context, service_name, method, *args,
+        **kwargs):
+    """Encapsulate a call to a service API within a broadcast message"""
+
+    method_info = {'method': method,
+                   'method_args': args,
+                   'method_kwargs': kwargs}
+    cell_broadcast(context, 'down', 'run_service_api_method',
+            service_name=service_name, method_info=method_info,
+            is_broadcast=True)
 
 
 def cast_service_api_method(context, cell_name, service_name, method,
@@ -56,7 +68,8 @@ def cast_service_api_method(context, cell_name, service_name, method,
                    'method_args': args,
                    'method_kwargs': kwargs}
     cell_cast(context, cell_name, 'run_service_api_method',
-            service_name=service_name, method_info=method_info)
+            service_name=service_name, method_info=method_info,
+            is_broadcast=False)
 
 
 def call_service_api_method(context, cell_name, service_name, method,
@@ -67,7 +80,8 @@ def call_service_api_method(context, cell_name, service_name, method,
                    'method_args': args,
                    'method_kwargs': kwargs}
     return cell_call(context, cell_name, 'run_service_api_method',
-            service_name=service_name, method_info=method_info)
+            service_name=service_name, method_info=method_info,
+            is_broadcast=False)
 
 
 def schedule_run_instance(context, **kwargs):

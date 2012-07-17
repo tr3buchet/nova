@@ -180,7 +180,16 @@ class ComputeCellsAPI(compute_api.API):
     def delete(self, context, instance):
         """Terminate an instance."""
         super(ComputeCellsAPI, self).delete(context, instance)
-        self._cast_to_cells(context, instance, 'delete')
+        try:
+            self._cast_to_cells(context, instance, 'delete')
+        except exception.InstanceUnknownCell:
+            # If there's no cell, there's also no host... which means
+            # the instance was destroyed from the DB here.  Let's just
+            # broadcast a message down to all cells and hope this ends
+            # up resolving itself...  Worse case.. the instance will
+            # show back up again here.
+            cells_api.broadcast_service_api_method(context, 'compute',
+                    'delete', instance['uuid'])
 
     def restore(self, context, instance):
         """Restore a previously deleted (but not reclaimed) instance."""

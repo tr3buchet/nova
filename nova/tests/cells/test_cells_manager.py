@@ -313,7 +313,6 @@ class CellsManagerClassTestCase(test.TestCase):
         self.assertEqual(gc_mgr._test_call_info['test_method'], 0)
 
     def test_run_service_api_method(self):
-
         compute_api = self.cells_manager.api_map['compute']
 
         call_info = {'compute': 0}
@@ -344,6 +343,44 @@ class CellsManagerClassTestCase(test.TestCase):
         self.cells_manager.run_service_api_method(fake_context,
                 'compute', method_info)
 
+    def test_run_service_api_method_unknown_instance(self):
+        compute_api = self.cells_manager.api_map['compute']
+
+        fake_context = 'fake_context'
+        info = {'compute_called': 0, 'bcast_message': {}}
+
+        def fake_instance_get(*args, **kwargs):
+            raise exception.InstanceNotFound(instance_id='uuid')
+
+        self.stubs.Set(db, 'instance_get_by_uuid', fake_instance_get)
+
+        def compute_method(*args, **kwargs):
+            info['compute_called'] += 1
+
+        compute_api.compute_method = compute_method
+
+        def fake_broadcast_message(context, **kwargs):
+            info['bcast_message'] = kwargs
+
+        self.stubs.Set(self.cells_manager, 'broadcast_message',
+                fake_broadcast_message)
+
+        method_info = {'method': 'compute_method',
+                       'method_args': ('uuid', 1, 2),
+                       'method_kwargs': {'kwarg1': 3, 'kwarg2': 4}}
+        self.assertRaises(exception.InstanceNotFound,
+                self.cells_manager.run_service_api_method, fake_context,
+                'compute', method_info)
+        expected_bcast_message = {
+                'routing_path': None,
+                'hopcount': 0,
+                'fanout': False,
+                'message': {'args': {'instance_info': {'uuid': 'uuid'}},
+                            'method': 'instance_destroy'},
+                'direction': 'up'}
+        self.assertEqual(info['compute_called'], 0)
+        self.assertEqual(info['bcast_message'], expected_bcast_message)
+
     def test_run_service_api_method_unknown_service(self):
         self.assertRaises(exception.CellServiceAPIMethodNotFound,
                 self.cells_manager.run_service_api_method, 'fake_context',
@@ -356,7 +393,7 @@ class CellsManagerClassTestCase(test.TestCase):
                 'compute', method_info)
 
     def test_instance_update(self):
-        fake_context = 'fake_context'
+        fake_context = context.RequestContext('moo', 'cow')
 
         instance_info = {'uuid': 'fake_uuid', 'updated_at': 'foo'}
         call_info = {'instance_update': 0}
@@ -397,7 +434,7 @@ class CellsManagerClassTestCase(test.TestCase):
         self.assertEqual(call_info['instance_update'], 0)
 
     def test_instance_update_when_doesnt_exist(self):
-        fake_context = 'fake_context'
+        fake_context = context.RequestContext('moo', 'cow')
 
         instance_info = {'uuid': 'fake_uuid', 'updated_at': 'foo'}
         call_info = {'instance_update': 0, 'instance_create': 0}
@@ -408,6 +445,8 @@ class CellsManagerClassTestCase(test.TestCase):
             # on the routing path.  Since updates flow up, the cell
             # name is the reverse of the routing path
             expected_values['cell_name'] = 'a!b!c!d!e'
+            # Also, the context should be able to read_deleted
+            self.assertEqual(context.read_deleted, 'yes')
             self.assertEqual(uuid, instance_info['uuid'])
             self.assertEqual(values, expected_values)
             call_info['instance_update'] += 1

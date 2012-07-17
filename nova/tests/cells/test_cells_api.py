@@ -96,16 +96,17 @@ class CellsAPITestCase(test.TestCase):
                 **fake_method_kwargs)
         self.assertEqual(call_info['cast_called'], 1)
 
-    def test_cell_broadcast_up(self):
+    def test_cell_broadcast(self):
         fake_context = 'fake_context'
         fake_method = 'fake_method'
+        fake_direction = 'fake_direction'
         fake_method_kwargs = {'kwarg1': 10, 'kwarg2': 20}
         fake_wrapped_message = 'fake_wrapped_message'
 
         def fake_form_broadcast_message(direction, method, method_kwargs):
+            self.assertEqual(direction, fake_direction)
             self.assertEqual(method, fake_method)
             self.assertEqual(method_kwargs, fake_method_kwargs)
-            self.assertEqual(direction, 'up')
             return fake_wrapped_message
 
         call_info = {'cast_called': 0}
@@ -120,7 +121,7 @@ class CellsAPITestCase(test.TestCase):
                 fake_form_broadcast_message)
         self.stubs.Set(rpc, 'cast', fake_rpc_cast)
 
-        cells_api.cell_broadcast_up(fake_context, fake_method,
+        cells_api.cell_broadcast(fake_context, fake_direction, fake_method,
                 **fake_method_kwargs)
         self.assertEqual(call_info['cast_called'], 1)
 
@@ -139,12 +140,13 @@ class CellsAPITestCase(test.TestCase):
         call_info = {'cast_called': 0}
 
         def fake_cell_cast(context, cell_name, method, service_name,
-                method_info):
+                method_info, is_broadcast):
             self.assertEqual(context, fake_context)
             self.assertEqual(cell_name, fake_cell_name)
             self.assertEqual(method, 'run_service_api_method')
             self.assertEqual(service_name, fake_service)
             self.assertEqual(method_info, expected_method_info)
+            self.assertFalse(is_broadcast)
             call_info['cast_called'] += 1
 
         self.stubs.Set(cells_api, 'cell_cast', fake_cell_cast)
@@ -168,12 +170,13 @@ class CellsAPITestCase(test.TestCase):
                                 'method_kwargs': fake_method_kwargs}
 
         def fake_cell_call(context, cell_name, method, service_name,
-                method_info):
+                method_info, is_broadcast):
             self.assertEqual(context, fake_context)
             self.assertEqual(cell_name, fake_cell_name)
             self.assertEqual(method, 'run_service_api_method')
             self.assertEqual(service_name, fake_service)
             self.assertEqual(method_info, expected_method_info)
+            self.assertFalse(is_broadcast)
             return fake_response
 
         self.stubs.Set(cells_api, 'cell_call', fake_cell_call)
@@ -182,6 +185,35 @@ class CellsAPITestCase(test.TestCase):
                 fake_cell_name, fake_service, fake_method,
                 *fake_method_args, **fake_method_kwargs)
         self.assertEqual(result, fake_response)
+
+    def test_broadcast_service_api_method(self):
+        fake_context = 'fake_context'
+        fake_method = 'fake_method'
+        fake_service = 'fake_service'
+        fake_method_args = (1, 2)
+        fake_method_kwargs = {'kwarg1': 10, 'kwarg2': 20}
+
+        expected_method_info = {'method': fake_method,
+                                'method_args': fake_method_args,
+                                'method_kwargs': fake_method_kwargs}
+
+        call_info = {'bcast_called': 0}
+
+        def fake_cell_broadcast(context, direction, method, service_name,
+                method_info, is_broadcast):
+            self.assertEqual(context, fake_context)
+            self.assertEqual(direction, 'down')
+            self.assertEqual(method, 'run_service_api_method')
+            self.assertEqual(service_name, fake_service)
+            self.assertEqual(method_info, expected_method_info)
+            self.assertTrue(is_broadcast)
+            call_info['bcast_called'] += 1
+
+        self.stubs.Set(cells_api, 'cell_broadcast', fake_cell_broadcast)
+
+        cells_api.broadcast_service_api_method(fake_context, fake_service,
+                fake_method, *fake_method_args, **fake_method_kwargs)
+        self.assertEqual(call_info['bcast_called'], 1)
 
     def test_schedule_run_instance(self):
         fake_context = 'fake_context'
