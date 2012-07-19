@@ -1515,9 +1515,17 @@ def instance_metadata_delete(context, instance_uuid, key):
     IMPL.instance_metadata_delete(context, instance_uuid, key)
 
 
-def instance_metadata_update(context, instance_uuid, metadata, delete):
+def instance_metadata_update(context, instance_uuid, metadata, delete,
+        update_cells=True):
     """Update metadata if it exists, otherwise create it."""
     IMPL.instance_metadata_update(context, instance_uuid, metadata, delete)
+    if update_cells:
+        try:
+            cells_api.instance_metadata_update(context, instance_uuid,
+                    metadata, delete)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of instance_metadata "
+                    "update"))
 
 
 ####################
@@ -1580,14 +1588,21 @@ def bw_usage_update(context,
                     uuid,
                     mac,
                     start_period,
-                    bw_in, bw_out):
+                    bw_in, bw_out, update_cells=True):
     """Update cached bw usage for an instance and network
        Creates new record if needed."""
-    return IMPL.bw_usage_update(context,
+    rv = IMPL.bw_usage_update(context,
                                 uuid,
                                 mac,
                                 start_period,
                                 bw_in, bw_out)
+    if update_cells:
+        try:
+            cells_api.bw_usage_update(context,
+                    uuid, mac, start_period, bw_in, bw_out)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of bw_usage update"))
+    return rv
 
 
 ####################

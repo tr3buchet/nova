@@ -178,6 +178,20 @@ def volume_unreserved(context, volume_id):
     rpc.cast(context, FLAGS.cells_topic, bcast_message)
 
 
+def bw_usage_update(context, *args, **kwargs):
+    """Broadcast upwards that bw_usage was updated."""
+    if not FLAGS.enable_cells:
+        return
+    call_dbapi_method(context, 'bw_usage_update', *args, **kwargs)
+
+
+def instance_metadata_update(context, *args, **kwargs):
+    """Broadcast upwards that bw_usage was updated."""
+    if not FLAGS.enable_cells:
+        return
+    call_dbapi_method(context, 'instance_metadata_update', *args, **kwargs)
+
+
 def get_all_cell_info(context):
     """Get the list of cells and their information from the manager."""
     msg = {'method': 'get_cell_info',
