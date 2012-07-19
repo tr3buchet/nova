@@ -91,6 +91,17 @@ def schedule_run_instance(context, **kwargs):
     rpc.cast(context, FLAGS.cells_topic, message)
 
 
+def call_dbapi_method(context, method, *args, **kwargs):
+    """Broadcast message up, saying to call a DB API method."""
+    db_method_info = {'method': method,
+                      'method_args': args,
+                      'method_kwargs': kwargs}
+    bcast_message = cells_utils.form_broadcast_message('up',
+            'call_dbapi_method',
+            {'db_method_info': db_method_info})
+    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+
+
 def instance_update(context, instance):
     """Broadcast upwards that an instance was updated."""
     if not FLAGS.enable_cells:
@@ -117,9 +128,7 @@ def instance_fault_create(context, instance_fault):
     items_to_remove = ['id']
     for key in items_to_remove:
         instance_fault.pop(key, None)
-    bcast_message = cells_utils.form_broadcast_message('up',
-            'instance_fault_create', {'fault_info': instance_fault})
-    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+    call_dbapi_method(context, 'instance_fault_create', instance_fault)
 
 
 def block_device_mapping_create(context, bdm):
@@ -131,44 +140,31 @@ def block_device_mapping_create(context, bdm):
     items_to_remove = ['id']
     for key in items_to_remove:
         bdm.pop(key, None)
-    bcast_message = cells_utils.form_broadcast_message('up', 'bdm_create',
-            {'bdm_info': bdm})
-    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+    call_dbapi_method(context, 'block_device_mapping_create', bdm)
 
 
 def block_device_mapping_destroy(context, instance_uuid, volume_id):
     """Broadcast upwards that a volume was updated."""
     if not FLAGS.enable_cells:
         return
-    bdm_info = {'instance_uuid': instance_uuid,
-                'volume_id': volume_id}
-    bcast_message = cells_utils.form_broadcast_message('up', 'bdm_destroy',
-            {'bdm_info': bdm_info})
-    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+    call_dbapi_method(context,
+            'block_device_mapping_destroy_by_instance_and_volume',
+            instance_uuid, volume_id)
 
 
 def volume_attached(context, volume_id, instance_uuid, mountpoint):
     """Broadcast upwards that a volume was updated."""
     if not FLAGS.enable_cells:
         return
-    volume_info = {'volume_id': volume_id,
-                   'instance_uuid': instance_uuid,
-                   'mountpoint': mountpoint}
-    bcast_message = cells_utils.form_broadcast_message(
-            'up', 'volume_attached',
-            {'volume_info': volume_info})
-    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+    call_dbapi_method(context, 'volume_attached', volume_id,
+            instance_uuid, mountpoint)
 
 
 def volume_detached(context, volume_id):
     """Broadcast upwards that a volume was updated."""
     if not FLAGS.enable_cells:
         return
-    volume_info = {'volume_id': volume_id}
-    bcast_message = cells_utils.form_broadcast_message(
-            'up', 'volume_detached',
-            {'volume_info': volume_info})
-    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+    call_dbapi_method(context, 'volume_detached', volume_id)
 
 
 def volume_unreserved(context, volume_id):

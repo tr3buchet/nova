@@ -1078,7 +1078,8 @@ def volume_allocate_iscsi_target(context, volume_id, host):
     return IMPL.volume_allocate_iscsi_target(context, volume_id, host)
 
 
-def volume_attached(context, volume_id, instance_id, mountpoint):
+def volume_attached(context, volume_id, instance_id, mountpoint,
+        update_cells=False):
     """Ensure that a volume is set as attached."""
     return IMPL.volume_attached(context, volume_id, instance_id, mountpoint)
 
@@ -1099,7 +1100,7 @@ def volume_destroy(context, volume_id):
     return IMPL.volume_destroy(context, volume_id)
 
 
-def volume_detached(context, volume_id):
+def volume_detached(context, volume_id, update_cells=False):
     """Ensure that a volume is set as detached."""
     return IMPL.volume_detached(context, volume_id)
 

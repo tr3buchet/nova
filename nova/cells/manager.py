@@ -810,7 +810,12 @@ class CellsManager(manager.Manager):
 
     def volume_attached(self, context, volume_info, routing_path,
             **kwargs):
-        """Update a volume in the DB if we're a top level cell."""
+        """Update a volume in the DB if we're a top level cell.
+
+        FIXME(comstud): Remove this after we've got a code update
+        pushed out.  This will not be called anymore, as cells_api
+        has been converted to use self.call_dbapi_method()
+        """
         if self.get_parent_cells() or self._path_is_us(routing_path):
             # Only update the DB if we're at the very top and the
             # call didn't originate from ourselves
@@ -829,7 +834,12 @@ class CellsManager(manager.Manager):
 
     def volume_detached(self, context, volume_info, routing_path,
             **kwargs):
-        """Update a volume in the DB if we're a top level cell."""
+        """Update a volume in the DB if we're a top level cell.
+
+        FIXME(comstud): Remove this after we've got a code update
+        pushed out.  This will not be called anymore, as cells_api
+        has been converted to use self.call_dbapi_method()
+        """
         if self.get_parent_cells() or self._path_is_us(routing_path):
             # Only update the DB if we're at the very top and the
             # call didn't originate from ourselves
@@ -862,7 +872,12 @@ class CellsManager(manager.Manager):
 
     def bdm_create(self, context, bdm_info, routing_path,
             **kwargs):
-        """Create a BDM in the DB if we're a top level cell."""
+        """Create a BDM in the DB if we're a top level cell.
+
+        FIXME(comstud): Remove this after we've got a code update
+        pushed out.  This will not be called anymore, as cells_api
+        has been converted to use self.call_dbapi_method()
+        """
         if self.get_parent_cells() or self._path_is_us(routing_path):
             # Only update the DB if we're at the very top and the
             # call didn't originate from ourselves
@@ -877,7 +892,12 @@ class CellsManager(manager.Manager):
 
     def bdm_destroy(self, context, bdm_info, routing_path,
             **kwargs):
-        """Destroy a BDM in the DB if we're a top level cell."""
+        """Destroy a BDM in the DB if we're a top level cell.
+
+        FIXME(comstud): Remove this after we've got a code update
+        pushed out.  This will not be called anymore, as cells_api
+        has been converted to use self.call_dbapi_method()
+        """
         if self.get_parent_cells() or self._path_is_us(routing_path):
             # Only update the DB if we're at the very top and the
             # call didn't originate from ourselves
@@ -910,13 +930,37 @@ class CellsManager(manager.Manager):
 
     def instance_fault_create(self, context, fault_info, routing_path,
             **kwargs):
-        """Create an instance fault in the DB if we're a top level cell."""
+        """Create an instance fault in the DB if we're a top level cell.
+
+        FIXME(comstud): Remove this after we've got a code update
+        pushed out.  This will not be called anymore, as cells_api
+        has been converted to use self.call_dbapi_method()
+        """
         if self.get_parent_cells() or self._path_is_us(routing_path):
             # Only update the DB if we're at the very top and the
             # call didn't originate from ourselves
             return
         self.db.instance_fault_create(context, fault_info,
                 update_cells=False)
+
+    def call_dbapi_method(self, context, db_method_info, routing_path,
+            **kwargs):
+        """Call a DB API method if we're a top level cell."""
+        if self.get_parent_cells() or self._path_is_us(routing_path):
+            # Only update the DB if we're at the very top and the
+            # call didn't originate from ourselves
+            return
+        method = db_method_info['method']
+        args = db_method_info['method_args']
+        kwargs = db_method_info['method_kwargs']
+        LOG.debug(_("Got message to call DB API method %(method)s "
+                "with args %(args)s and kwargs %(kwargs)s"),
+                locals())
+        db_method = getattr(self.db, method)
+        try:
+            db_method(context, *args, update_cells=False, **kwargs)
+        except exception.NotFound:
+            pass
 
     def announce_capabilities(self, context, routing_path, **kwargs):
         """A parent cell has told us to send our capabilities."""
