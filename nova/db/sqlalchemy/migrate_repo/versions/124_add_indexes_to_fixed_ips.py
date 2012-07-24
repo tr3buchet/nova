@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 
 def upgrade(migrate_engine):
+    return
     meta = MetaData()
     meta.bind = migrate_engine
 
@@ -53,6 +54,7 @@ def upgrade(migrate_engine):
 
 
 def downgrade(migrate_engine):
+    return
     meta = MetaData()
     meta.bind = migrate_engine
 

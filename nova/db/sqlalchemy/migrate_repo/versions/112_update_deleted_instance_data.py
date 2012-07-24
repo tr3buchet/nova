@@ -67,3 +67,17 @@ def downgrade(migrate_engine):
                 {table.c.deleted: True,
                  table.c.deleted_at: instance['deleted_at']}
             ).execute()
+
+
+def upgrade(migrate_engine):
+    #(NO-OP)
+    #NOTE(ameade): We do not want this migration to run whenever we deploy
+    # but only at our leisure
+    pass
+
+
+def downgrade(migrate_engine):
+    #(NO-OP)
+    #NOTE(ameade): We do not want this migration to run whenever we deploy
+    # but only at our leisure
+    pass

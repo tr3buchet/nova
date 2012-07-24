@@ -22,6 +22,7 @@ LOG = logging.getLogger(__name__)
 
 
 def upgrade(migrate_engine):
+    return
     # Reverse the previous migration
     meta = MetaData()
     meta.bind = migrate_engine
@@ -45,6 +46,7 @@ def upgrade(migrate_engine):
 
 
 def downgrade(migrate_engine):
+    return
     # Undo the reversal of the previous migration
     # (data is not preserved)
     meta = MetaData()
