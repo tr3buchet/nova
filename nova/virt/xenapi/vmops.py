@@ -35,6 +35,7 @@ from nova import context as nova_context
 from nova import db
 from nova import exception
 from nova import flags
+from nova.image import glance
 from nova.openstack.common import cfg
 from nova.openstack.common import excutils
 from nova.openstack.common import importutils
@@ -76,6 +77,11 @@ xenapi_vmops_opts = [
                default=None,
                help=_('File containing a list of IP addresses to whitelist '
                       'on managed hosts')),
+    cfg.StrOpt('max_snapshot_size',
+              default=0,
+              help=_('Maximum allowed number of bytes (before compression)'
+                     ' that may be uploaded during an instance snapshot.'
+                     ' A value of zero means there is no limit.')),
     ]
 
 CONF = config.CONF
@@ -705,11 +711,25 @@ class VMOps(object):
         """
         vm_ref = self._get_vm_opaque_ref(instance)
         label = "%s-snapshot" % instance['name']
+        max_size = CONF.max_snapshot_size
 
         with vm_utils.snapshot_attached_here(
                 self._session, instance, vm_ref, label) as vdi_uuids:
-            vm_utils.upload_image(
-                    context, self._session, instance, vdi_uuids, image_id)
+            try:
+                vm_utils.upload_image(context, self._session, instance,
+                                      vdi_uuids, image_id, max_size)
+            except self._session.XenAPI.Failure as exc:
+                _type, _method, error = exc.details[:3]
+                if error == 'VHDsTooLargeError':
+                    LOG.warn(_("Refusing to create snapshot. Instance size is"
+                               " greater than maximum allowed snapshot size"),
+                               instance=instance)
+                    image_service = glance.get_default_image_service()
+                    image_service.update(context, image_id,
+                                        {'status': 'error'})
+                    return
+                else:
+                    raise
 
         LOG.debug(_("Finished snapshot and upload for VM"),
                   instance=instance)

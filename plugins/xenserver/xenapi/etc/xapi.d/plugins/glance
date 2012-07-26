@@ -35,6 +35,10 @@ class RetryableError(Exception):
     pass
 
 
+class VHDsTooLargeError(Exception):
+    pass
+
+
 def _download_tarball_and_verify(request, staging_path):
     try:
         response = urllib2.urlopen(request)
@@ -222,12 +226,17 @@ def download_vhd(session, image_id, glance_host, glance_port, glance_use_ssl,
 
 
 def upload_vhd(session, vdi_uuids, image_id, glance_host, glance_port,
-               glance_use_ssl, sr_path, auth_token, project_id, properties):
+               glance_use_ssl, sr_path, auth_token, project_id, max_size,
+               properties):
     """Bundle the VHDs comprising an image and then stream them into Glance.
     """
     staging_path = utils.make_staging_area(sr_path)
     try:
-        utils.prepare_staging_area(sr_path, staging_path, vdi_uuids)
+        size = utils.prepare_staging_area(sr_path, staging_path, vdi_uuids)
+        if max_size > 0 and size > max_size:
+            logging.warn("The size of vhds (%d) exceeds the maximum snapshot"
+                        " size (%d) ", size, max_size)
+            raise VHDsTooLargeError(str(size))
         _upload_tarball(staging_path, image_id, glance_host, glance_port,
                         glance_use_ssl, auth_token, project_id, properties)
     finally:

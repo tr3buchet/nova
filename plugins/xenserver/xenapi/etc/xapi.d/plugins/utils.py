@@ -306,11 +306,14 @@ def import_vhds(sr_path, staging_path, uuid_stack):
 
 def prepare_staging_area(sr_path, staging_path, vdi_uuids, seq_num=0):
     """Hard-link VHDs into staging area."""
+    size = 0
     for vdi_uuid in vdi_uuids:
         source = os.path.join(sr_path, "%s.vhd" % vdi_uuid)
+        size += os.path.getsize(source)
         link_name = os.path.join(staging_path, "%d.vhd" % seq_num)
         _link(source, link_name)
         seq_num += 1
+    return size
 
 
 def create_tarball(fileobj, path, callback=None):

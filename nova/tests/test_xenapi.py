@@ -419,6 +419,27 @@ class XenAPIVMTestCase(stubs.XenAPITestBase):
             name_label = vdi_rec["name_label"]
             self.assert_(not name_label.endswith('snapshot'))
 
+    def test_snapshot_size_too_large(self):
+        stubs.stubout_instance_snapshot(self.stubs)
+        stubs.stubout_is_snapshot(self.stubs)
+        # Stubbing out firewall driver as previous stub sets alters
+        # xml rpc result parsing
+        stubs.stubout_firewall_driver(self.stubs, self.conn)
+        instance = self._create_instance()
+        image_service = fake_image.FakeImageService()
+        image_service.create(None, {'id': 'fakesnapshot123',
+                                    'status': 'queued'})
+
+        def fake_upload(*args, **kwargs):
+            raise xenapi_fake.Failure([None, None, 'VHDsTooLargeError'])
+
+        self.stubs.Set(vm_utils, 'upload_image', fake_upload)
+        self.flags(max_snapshot_size=100)
+
+        self.conn.snapshot(self.context, instance, 'fakesnapshot123')
+        snapshot_image = image_service.show(None, 'fakesnapshot123')
+        self.assertEqual(snapshot_image['status'], 'error')
+
     def create_vm_record(self, conn, os_type, name):
         instances = conn.list_instances()
         self.assertEquals(instances, [name])
