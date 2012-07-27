@@ -1010,6 +1010,9 @@ class VMOps(object):
 
     def change_instance_metadata(self, instance, diff):
         """Apply changes to instance metadata to xenstore."""
+        # FIXME(comstud): Temporarily disabled until we can test
+        # that xenstore-write is okay with & and ;, etc security wise.
+        return
         vm_ref = self._get_vm_opaque_ref(instance)
         for key, change in diff.items():
             key = self._sanitize_xenstore_key(key)
