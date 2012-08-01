@@ -1634,25 +1634,14 @@ def _average_series(data, col, until=None):
 def _integrate_series(data, col, start, until=None):
     total = decimal.Decimal('0.0000')
     prev_time = int(start)
-    prev_val = None
     for row in reversed(data):
         if not until or (row['time'] <= until):
             time = row['time']
             val = row['values'][col]
             if val.is_nan():
                 val = decimal.Decimal('0.0000')
-            if prev_val is None:
-                prev_val = val
-            if prev_val >= val:
-                total += ((val * (time - prev_time)) +
-                          (decimal.Decimal('0.5000') * (prev_val - val) *
-                          (time - prev_time)))
-            else:
-                total += ((prev_val * (time - prev_time)) +
-                          (decimal.Decimal('0.5000') * (val - prev_val) *
-                          (time - prev_time)))
+            total += (val * (time - prev_time))
             prev_time = time
-            prev_val = val
     return total.quantize(decimal.Decimal('1.0000'))
 
 
