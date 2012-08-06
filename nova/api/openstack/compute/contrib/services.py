@@ -23,12 +23,15 @@ from nova.api.openstack.compute.views import servers as views_servers
 from nova.api.openstack import extensions
 from nova.api.openstack import wsgi
 from nova.api.openstack import xmlutil
+from nova.cells import api as cells_api
 from nova import db
 from nova import exception
+from nova import flags
 from nova.openstack.common import log as logging
 from nova.openstack.common import rpc
 
 
+FLAGS = flags.FLAGS
 LOG = logging.getLogger("nova.api.contrib.services")
 
 
@@ -198,6 +201,124 @@ class ServicesController(object):
             raise webob.exc.HTTPNotFound()
 
 
+class CellsServicesController(object):
+    """The Service API controller for the OpenStack API. Works with cells."""
+
+    def __init__(self):
+        self._view_builder = views_servers.ViewBuilder()
+
+    def _find_single_response(self, responses, match_cell_name=None):
+        for (response, cell_name) in responses:
+            if match_cell_name and cell_name == match_cell_name:
+                return response
+            elif match_cell_name is None and respose:
+                return response
+
+    def _get_all_services(self, context):
+        """Get services locally, or from cells."""
+        responses = cells_api.cell_broadcast_call(context,
+                                                  "down",
+                                                  "list_services")
+        for (response, cell_name) in responses:
+            for item in response:
+                item["id"] = "%s-%s" % (cell_name, item["id"])
+                yield item
+
+    def _get_service_and_cell(self, context, service_id):
+        """Get service locally, or from child cell."""
+        responses = cells_api.cell_broadcast_call(context, "down",
+                "get_service", service_id=service_id)
+        for (response, cell_name) in responses:
+            if response:
+                return response, cell_name
+
+    def _get_service(self, context, service_id):
+        """Get service locally, or from child cell."""
+        try:
+            cell_name, service_id = service_id.split("-")
+        except (ValueError, AttributeError):
+            raise webob.exc.HTTPNotFound()
+        responses = cells_api.cell_broadcast_call(context, "down",
+                "get_service", service_id=service_id)
+        return self._find_single_response(responses, match_cell_name=cell_name)
+
+    def _get_compute_node(self, context, compute_id):
+        """Get compute node information given a compute node id."""
+        try:
+            cell_name, compute_id = compute_id.split("-")
+        except (ValueError, AttributeError):
+            raise webob.exc.HTTPNotFound()
+        responses = cells_api.cell_broadcast_call(context, "down",
+                "compute_node_get", compute_node_id=compute_id)
+        return self._find_single_response(responses, match_cell_name=cell_name)
+
+    @wsgi.serializers(xml=ServicesTemplate)
+    def index(self, req):
+        """Returns a list of services"""
+        context = req.environ['nova.context']
+        base_url = req.application_url
+        services = self._get_all_services(context)
+        return {"services": [_build_service(base_url, s) for s in services]}
+
+    @wsgi.serializers(xml=ServiceTemplate)
+    def show(self, req, id):
+        """Show summary of a specific service."""
+        context = req.environ['nova.context']
+        service = self._get_service(context, id)
+        return {'service': _build_service(req.application_url, service)}
+
+    @wsgi.serializers(xml=DetailsTemplate)
+    def details(self, req, id):
+        """Return service_type specific information for a service.
+
+        For a 'compute' service, this will include used memory.
+        """
+        context = req.environ['nova.context']
+        service = self._get_service(context, id)
+
+        details = {}
+
+        topic = service['topic']
+        if topic == 'compute':
+            compute_node = service["compute_node"][0]
+            for attr in COMPUTE_NODE_ATTRS:
+                details[attr] = compute_node[attr]
+
+            instances = db.instance_get_all_by_host(context, service['host'])
+            details['memory_mb_used_servers'] = sum(
+                inst['memory_mb'] for inst in instances
+                if inst['vm_state'] == 'active')
+
+        return {'details': details}
+
+    @wsgi.serializers(xml=servers.ServersTemplate)
+    def servers(self, req, id):
+        context = req.environ['nova.context']
+        service = self._get_service(context, id)
+        instances = db.instance_get_all_by_host(context, service['host'])
+        return self._view_builder.detail(req, instances)
+
+    @wsgi.serializers(xml=VersionTemplate)
+    def version(self, req, id):
+        raise webob.exc.HTTPNotImplemented()
+
+    @wsgi.serializers(xml=ConfigTemplate)
+    def config(self, req, id):
+        raise webob.exc.HTTPNotImplemented()
+
+    def disable(self, req, id):
+        raise webob.exc.HTTPNotImplemented()
+
+    def enable(self, req, id):
+        raise webob.exc.HTTPNotImplemented()
+
+
+if FLAGS.enable_cells:
+    controller = CellsServicesController()
+else:
+    controller = ServicesController()
+
+
 class Services(extensions.ExtensionDescriptor):
     """Services support"""
 
@@ -208,7 +329,7 @@ class Services(extensions.ExtensionDescriptor):
 
     def get_resources(self):
         service = extensions.ResourceExtension('services',
-                    ServicesController(),
+                    controller,
                     member_actions={'config': 'GET',
                                     'details': 'GET',
                                     'servers': 'GET',
