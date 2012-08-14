@@ -1638,7 +1638,7 @@ def _integrate_series(data, col, start, until=None):
         if not until or (row['time'] <= until):
             time = row['time']
             val = row['values'][col]
-            if val.is_nan():
+            if not val.is_finite():
                 val = decimal.Decimal('0.0000')
             total += (val * (time - prev_time))
             prev_time = time
