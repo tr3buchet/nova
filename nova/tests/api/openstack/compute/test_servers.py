@@ -1625,7 +1625,8 @@ class ServersControllerCreateTest(test.TestCase):
         super(ServersControllerCreateTest, self).setUp()
 
         self.flags(verbose=True,
-                   enable_instance_password=True)
+                   enable_instance_password=True,
+                   enable_requested_networks=False)
         self.instance_cache_num = 0
         self.instance_cache_by_id = {}
         self.instance_cache_by_uuid = {}

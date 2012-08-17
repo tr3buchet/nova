@@ -399,6 +399,10 @@ global_opts = [
                      ' instance root password. Format is:'
                      ' <target>:<key_version>:<path-to-public-key-file> ('
                      ' Ex. "rack_connect:123:/tmp/rack_connect_123.pub")'),
+    cfg.BoolOpt('enable_requested_networks',
+                default=True,
+                help='Enable requested_networks regardless of os-networks '
+                     'extension'),
 ]
 
 CONF.register_opts(global_opts)

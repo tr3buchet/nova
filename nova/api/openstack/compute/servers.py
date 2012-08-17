@@ -766,7 +766,8 @@ class Controller(wsgi.Controller):
         sg_names = list(set(sg_names))
 
         requested_networks = None
-        if self.ext_mgr.is_loaded('os-networks'):
+        if (self.ext_mgr.is_loaded('os-networks') or
+            CONF.enable_requested_networks):
             requested_networks = server_dict.get('networks')
 
         if requested_networks is not None:
