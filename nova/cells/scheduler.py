@@ -129,12 +129,17 @@ class CellsScheduler(base.Base):
         """
         request_spec = kwargs['request_spec']
 
+        # HACK(brian.lamar): We don't work with multiple instances being
+        #                    created at the same time, this hack makes
+        #                    sure the UUID is where we expect it to be
+        instance_uuid = request_spec['instance_uuids'][0]
+        request_spec['instance_properties']['uuid'] = instance_uuid
+
         fw_properties = copy.copy(kwargs.get('filter_properties', {}))
         fw_properties.update({'context': context,
                               'scheduler': self,
                               'routing_path': routing_path,
                               'request_spec': request_spec})
-        instance_uuid = request_spec['instance_properties'].get('uuid')
 
         LOG.debug(_("Scheduling with routing_path=%(routing_path)s"),
                 locals(), instance_uuid=instance_uuid)
