@@ -144,7 +144,7 @@ def instance_fault_create(context, instance_fault):
 
 
 def block_device_mapping_create(context, bdm):
-    """Broadcast upwards that a volume was updated."""
+    """Broadcast upwards that a volume was created."""
     if not FLAGS.enable_cells:
         return
     bdm = dict(bdm.iteritems())
@@ -153,6 +153,32 @@ def block_device_mapping_create(context, bdm):
     for key in items_to_remove:
         bdm.pop(key, None)
     call_dbapi_method(context, 'block_device_mapping_create',
+            (bdm, ))
+
+
+def block_device_mapping_update(context, bdm_id, bdm):
+    """Broadcast upwards that a volume was updated."""
+    if not FLAGS.enable_cells:
+        return
+    bdm = dict(bdm.iteritems())
+    # Remove things that we can't update in the parent.
+    items_to_remove = ['id']
+    for key in items_to_remove:
+        bdm.pop(key, None)
+    call_dbapi_method(context, 'block_device_mapping_update',
+            (bdm_id, bdm))
+
+
+def block_device_mapping_update_or_create(context, bdm):
+    """Broadcast upwards that a bdm was updated."""
+    if not FLAGS.enable_cells:
+        return
+    bdm = dict(bdm.iteritems())
+    # Remove things that we can't update in the parent.
+    items_to_remove = ['id']
+    for key in items_to_remove:
+        bdm.pop(key, None)
+    call_dbapi_method(context, 'block_device_mapping_update_or_create',
             (bdm, ))
 
 

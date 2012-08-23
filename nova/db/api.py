@@ -1125,21 +1125,33 @@ def block_device_mapping_create(context, values, update_cells=True):
     rv = IMPL.block_device_mapping_create(context, values)
     if update_cells:
         try:
-            cells_api.block_device_mapping_create(context, rv)
+            cells_api.block_device_mapping_create(context, values)
         except Exception:
             LOG.exception(_("Failed to notify cells of BDM create"))
     return rv
 
 
-def block_device_mapping_update(context, bdm_id, values):
+def block_device_mapping_update(context, bdm_id, values, update_cells=True):
     """Update an entry of block device mapping"""
-    return IMPL.block_device_mapping_update(context, bdm_id, values)
+    rv = IMPL.block_device_mapping_update(context, bdm_id, values)
+    if update_cells:
+        try:
+            cells_api.block_device_mapping_update(context, bdm_id, values)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of BDM update"))
+    return rv
 
 
-def block_device_mapping_update_or_create(context, values):
+def block_device_mapping_update_or_create(context, values, update_cells=True):
     """Update an entry of block device mapping.
     If not existed, create a new entry"""
-    return IMPL.block_device_mapping_update_or_create(context, values)
+    rv = IMPL.block_device_mapping_update_or_create(context, values)
+    if update_cells:
+        try:
+            cells_api.block_device_mapping_update_or_create(context, values)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of BDM update or create"))
+    return rv
 
 
 def block_device_mapping_get_all_by_instance(context, instance_uuid):
