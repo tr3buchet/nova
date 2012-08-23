@@ -71,14 +71,14 @@ def _create_glance_client(context, host, port, use_ssl, version=1):
     return glanceclient.Client(str(version), endpoint, **params)
 
 
-def get_api_servers():
-    """
-    Shuffle a list of CONF.glance_api_servers and return an iterator
-    that will cycle through the list, looping around to the beginning
-    if necessary.
-    """
+def get_api_server_list(api_server_config_list=None):
+    """Get a randomly shuffled list of CONF.glance_api_servers"""
+
+    if not api_server_config_list:
+        api_server_config_list = CONF.glance_api_servers
+
     api_servers = []
-    for api_server in CONF.glance_api_servers:
+    for api_server in api_server_config_list:
         if '//' not in api_server:
             api_server = 'http://' + api_server
         o = urlparse.urlparse(api_server)
@@ -87,6 +87,14 @@ def get_api_servers():
         use_ssl = (o.scheme == 'https')
         api_servers.append((host, port, use_ssl))
     random.shuffle(api_servers)
+    return api_servers
+
+
+def get_api_servers():
+    """Shuffle a list of FLAGS.glance_api_servers and return an iterator that
+    will cycle through the list, looping around to the beginning if necessary.
+    """
+    api_servers = get_api_server_list()
     return itertools.cycle(api_servers)
 
 
@@ -115,11 +123,26 @@ class GlanceClientWrapper(object):
 
     def _create_onetime_client(self, context, version):
         """Create a client that will be used for one call."""
-        if self.api_servers is None:
-            self.api_servers = get_api_servers()
-        self.host, self.port, self.use_ssl = self.api_servers.next()
-        return _create_glance_client(context,
-                                     self.host, self.port,
+        if context.glance_api_servers:
+            # The client supplied its own list of API servers:
+
+            # NOTE(belliott) This is needed for use with Racker Admin API
+            # tokens in child cells.  Such tokens have a separate Keystone
+            # and Glance servers.  The token can't be used against the
+            # default Glance servers in child cells.
+            api_servers = get_api_server_list(context.glance_api_servers)
+
+            # just choose one randomly, can't cycle this list across requests:
+            x = random.randint(0, len(api_servers) - 1)
+            self.host, self.port, self.use_ssl = api_servers[x]
+            LOG.debug(_("Using client specified Glance API server: %(host)s:"
+                        "%(port)s"), {'host': self.host, 'port': self.port})
+        else:
+            if self.api_servers is None:
+                self.api_servers = get_api_servers()
+            self.host, self.port, self.use_ssl = self.api_servers.next()
+
+        return _create_glance_client(context, self.host, self.port,
                                      self.use_ssl, version)
 
     def call(self, context, version, method, *args, **kwargs):

@@ -337,6 +337,9 @@ class ComputeCellsAPI(compute_api.API):
         the original flavor_id. If flavor_id is not None, the instance should
         be migrated to a new host and resized to the new flavor_id.
         """
+        # specify glance api servers to use downstream in child cells:
+        context.glance_api_servers = FLAGS.glance_api_servers
+
         super(ComputeCellsAPI, self).resize(context, instance, *args, **kwargs)
 
         # NOTE(johannes): If we get to this point, then we know the

@@ -559,6 +559,38 @@ class TestGlanceClientWrapper(test.TestCase):
             pass
         self.stubs.Set(time, 'sleep', _fake_sleep)
 
+    def test_get_api_server_list(self):
+        servers = glance.get_api_server_list()
+        self.assertEqual(3, len(servers))
+        self.assertTrue(('host3', 9294, False) in servers)
+
+    def test_client_specified_api_servers(self):
+        """Test client's ability to override the API servers"""
+        client = glance.GlanceClientWrapper()
+        glance_api_servers = ["https://hostfoo:1234"]
+        ctxt = context.RequestContext('fake', 'fake',
+                glance_api_servers=glance_api_servers)
+
+        def fake_create(ctxt, host, port, use_ssl, version):
+            self.assertEqual('hostfoo', host)
+            self.assertEqual(1234, port)
+            self.assertTrue(use_ssl)
+            self.assertEqual(1, version)
+
+        self.stubs.Set(glance, '_create_glance_client', fake_create)
+        client._create_onetime_client(ctxt, 1)
+
+    def test_config_specified_api_servers(self):
+        client = glance.GlanceClientWrapper()
+        ctxt = context.RequestContext('fake', 'fake')
+
+        def fake_create(ctxt, host, port, use_ssl, version):
+            self.assertTrue(host in ['host1', 'host2', 'host3'])
+            self.assertTrue(port in [9292, 9293, 9294])
+
+        self.stubs.Set(glance, '_create_glance_client', fake_create)
+        client._create_onetime_client(ctxt, 1)
+
     def test_static_client_without_retries(self):
         self.flags(glance_num_retries=0)
 
