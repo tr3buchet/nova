@@ -28,6 +28,7 @@ import eventlet
 from eventlet import greenthread
 from eventlet import queue
 
+from nova.cells import config as cells_config
 from nova.cells import rpcapi as cells_rpcapi
 from nova.cells import utils as cells_utils
 from nova import compute
@@ -178,6 +179,7 @@ class CellsManager(manager.Manager):
             cell_info_cls = CellInfo
 
         self.cells_rpcapi = cells_rpcapi.CellsAPI(cells_driver_cls)
+        self.cells_config = cells_config.CellsConfig()
         self.bw_updates_topic = FLAGS.cells_topic + '.bw_updates'
         self.replies_topic = FLAGS.cells_topic + '.replies'
         self.scheduler = cells_scheduler_cls(self)

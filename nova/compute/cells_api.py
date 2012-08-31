@@ -17,6 +17,7 @@
 
 import re
 
+from nova.cells import config as cells_config
 from nova.cells import rpcapi as cells_rpcapi
 from nova.compute import api as compute_api
 from nova.compute import instance_types
@@ -24,19 +25,9 @@ from nova.compute import task_states
 from nova.compute import vm_states
 from nova import exception
 from nova import flags
-from nova.openstack.common import cfg
-from nova.openstack.common import jsonutils
 from nova.openstack.common import log as logging
-from nova import utils
-
-flag_opts = [
-        cfg.StrOpt('cells_config_file',
-                   default=None,
-                   help="Configuration file for cells")
-]
 
 FLAGS = flags.FLAGS
-FLAGS.register_opts(flag_opts)
 LOG = logging.getLogger(__name__)
 
 
@@ -80,33 +71,10 @@ class ComputeCellsAPI(compute_api.API):
         self.compute_rpcapi = ComputeRPCAPINoOp()
         # Redirect scheduler run_instance to cells.
         self.scheduler_rpcapi = SchedulerRPCAPIRedirect(self.cells_rpcapi)
-        cells_config_file = FLAGS.cells_config_file
-        if cells_config_file:
-            self._cells_config_file = FLAGS.find_file(cells_config_file)
-        else:
-            self._cells_config_file = None
-        self._cells_config_cacheinfo = {}
-        self._cells_config = {}
-        self._reload_cells_config()
+        self._cells_config = cells_config.CellsConfig()
 
-    def _reload_cells_config(self):
-        def _reload(data):
-            self._cells_config = jsonutils.loads(data)
-
-        if not self._cells_config_file:
-            cells_config_file = FLAGS.cells_config_file
-            if cells_config_file:
-                # See if it exists now
-                self._cells_config_file = FLAGS.find_file(cells_config_file)
-
-        if self._cells_config_file:
-            utils.read_cached_file(self._cells_config_file,
-                    self._cells_config_cacheinfo, reload_func=_reload)
-
-    def _cell_read_only(self, cell_name):
-        self._reload_cells_config()
-        cell_info = self._cells_config.get(cell_name, {})
-        return cell_info.get('read_only', False)
+    def _cell_read_only(self, cell_name, context=None):
+        return self._cells_config.cell_read_only(cell_name, context)
 
     def _validate_cell(self, instance, method):
         cell_name = instance['cell_name']

@@ -141,6 +141,7 @@ class CellsScheduler(base.Base):
 
         fw_properties = copy.copy(kwargs.get('filter_properties', {}))
         fw_properties.update({'context': context,
+                              'cells_config': self.manager.cells_config,
                               'scheduler': self,
                               'routing_path': routing_path,
                               'request_spec': request_spec})

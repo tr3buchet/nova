@@ -56,7 +56,8 @@ class CellsSchedulerTestCase(test.TestCase):
     def test_schedule_run_instance_happy_day(self):
         # Tests that requests make it to child cell, instance is created,
         # and an update is returned back upstream
-        fake_context = context.RequestContext('fake', 'fake')
+        fake_context = context.RequestContext('fake', 'fake',
+                roles=['cell-*'])
         fake_topic = 'compute'
         fake_instance_props = {'vm_state': 'fake_vm_state',
                                'security_groups': 'meow'}
