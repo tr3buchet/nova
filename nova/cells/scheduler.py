@@ -31,6 +31,7 @@ from nova import flags
 from nova.openstack.common import cfg
 from nova.openstack.common import log as logging
 from nova.openstack.common import rpc
+from nova.scheduler import rpcapi as scheduler_rpcapi
 
 flag_opts = [
         cfg.ListOpt('cell_scheduler_filters',
@@ -68,6 +69,8 @@ class CellsScheduler(base.Base):
                 FLAGS.cell_scheduler_filters)
         self.weighter_classes = weights.get_weighter_classes(
                 FLAGS.cell_scheduler_weighters)
+
+        self.scheduler_rpcapi = scheduler_rpcapi.SchedulerAPI()
 
     @property
     def our_path(self):
@@ -179,7 +182,8 @@ class CellsScheduler(base.Base):
                     # currently work.
                     self._create_instance_here(context, **kwargs)
                     fwd_msg['method'] = 'run_instance'
-                    rpc.cast(context, FLAGS.scheduler_topic, fwd_msg)
+
+                    self._cast_to_scheduler(context, fwd_msg)
                 else:
                     # Forward request to cell
                     fwd_msg['method'] = 'schedule_run_instance'
@@ -193,6 +197,19 @@ class CellsScheduler(base.Base):
         msg = _("Couldn't communicate with any cells")
         LOG.error(msg)
         raise exception.NoCellsAvailable()
+
+    def _cast_to_scheduler(self, context, fwd_msg):
+        # NOTE(belliott) Kinda hackish, but this runs the
+        # message through the scheduler rpcapi and tags it
+        # with a proper version:
+        self.scheduler_rpcapi.run_instance(context,
+                fwd_msg['args']['request_spec'],
+                fwd_msg['args']['admin_password'],
+                fwd_msg['args']['injected_files'],
+                fwd_msg['args']['requested_networks'],
+                fwd_msg['args']['is_first_time'],
+                fwd_msg['args']['filter_properties'])
+        #rpc.cast(context, FLAGS.scheduler_topic, fwd_msg)
 
     def schedule_run_instance_direct(self, context, routing_path, **kwargs):
         """Pick a cell where we should create a new instance.

@@ -82,14 +82,16 @@ class CellsSchedulerTestCase(test.TestCase):
             call_info['create_called'] += 1
             return fake_instance_props
 
-        def fake_rpc_cast(context, topic, message):
-            args = {'topic': fake_topic,
-                    'request_spec': fake_request_spec,
-                    'filter_properties': fake_filter_properties}
-            expected_message = {'method': 'run_instance',
-                                'args': args}
-            self.assertEqual(context, fake_context)
-            self.assertEqual(message, expected_message)
+        def fake_cast(self, context, fwd_msg):
+            request_spec = fwd_msg['args']['request_spec']
+            filter_props = fwd_msg['args']['filter_properties']
+            topic = fwd_msg['args']['topic']
+            if not fake_request_spec == request_spec:
+                raise Exception("Wrong request spec")
+            if not fake_filter_properties == filter_props:
+                raise Exception("Wrong filter spec")
+            if not fake_topic == topic:
+                raise Exception("Wrong topic")
             call_info['cast_called'] += 1
 
         # Called in top level.. should be pushed up from GC cell
@@ -106,13 +108,18 @@ class CellsSchedulerTestCase(test.TestCase):
         self.stubs.Set(gc_mgr.scheduler.compute_api,
                 'create_db_entry_for_new_instance',
                 fake_create_db_entry)
-        self.stubs.Set(rpc, 'cast', fake_rpc_cast)
+        self.stubs.Set(cells_scheduler.CellsScheduler, '_cast_to_scheduler',
+                fake_cast)
         self.stubs.Set(self.cells_manager, 'instance_update',
                 fake_instance_update)
 
         self.cells_manager.schedule_run_instance(fake_context,
                 topic=fake_topic,
                 request_spec=fake_request_spec,
+                admin_password='foo',
+                injected_files=[],
+                requested_networks=None,
+                is_first_time=True,
                 filter_properties=fake_filter_properties)
         self.assertEqual(call_info['create_called'], 1)
         self.assertEqual(call_info['cast_called'], 1)
