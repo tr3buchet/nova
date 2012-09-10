@@ -459,9 +459,9 @@ class ComputeCellsAPI(compute_api.API):
 
     @wrap_check_policy
     @validate_cell
-    def attach_volume(self, context, instance, volume_id, device):
+    def attach_volume(self, context, instance, volume_id, device=None):
         """Attach an existing volume to an existing instance."""
-        if not re.match("^/dev/x{0,1}[a-z]d[a-z]+$", device):
+        if device and not re.match("^/dev/x{0,1}[a-z]d[a-z]+$", device):
             raise exception.InvalidDevicePath(path=device)
         super(ComputeCellsAPI, self).attach_volume(context, instance,
                 volume_id, device)
