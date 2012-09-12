@@ -16,7 +16,9 @@
 Tests For CellsScheduler
 """
 
+from nova.cells import rpcapi as cells_rpcapi
 from nova.cells import scheduler as cells_scheduler
+from nova import context
 from nova import flags
 from nova.openstack.common import rpc
 from nova import test
@@ -34,10 +36,11 @@ class CellsSchedulerTestCase(test.TestCase):
         self.flags(cell_name='me', host='host0')
         fakes.init()
 
+        rpcapi_obj = cells_rpcapi.CellsAPI(
+                cells_driver_cls=fakes.FakeCellsDriver)
         self.cells_manager = fakes.FakeCellsManager(
                 _test_case=self,
                 _my_name=FLAGS.cell_name,
-                cells_driver_cls=fakes.FakeCellsDriver,
                 cells_scheduler_cls=cells_scheduler.CellsScheduler)
         self.scheduler = self.cells_manager.scheduler
         # Fudge our child cells so we only have 'cell2' as a child
@@ -53,7 +56,7 @@ class CellsSchedulerTestCase(test.TestCase):
     def test_schedule_run_instance_happy_day(self):
         # Tests that requests make it to child cell, instance is created,
         # and an update is returned back upstream
-        fake_context = 'fake_context'
+        fake_context = context.RequestContext('fake', 'fake')
         fake_topic = 'compute'
         fake_instance_props = {'vm_state': 'fake_vm_state',
                                'security_groups': 'meow'}

@@ -23,7 +23,7 @@ from nova.api.openstack.compute.views import servers as views_servers
 from nova.api.openstack import extensions
 from nova.api.openstack import wsgi
 from nova.api.openstack import xmlutil
-from nova.cells import api as cells_api
+from nova.cells import rpcapi as cells_rpcapi
 from nova import db
 from nova import exception
 from nova import flags
@@ -206,6 +206,7 @@ class CellsServicesController(object):
 
     def __init__(self):
         self._view_builder = views_servers.ViewBuilder()
+        self.cells_rpcapi = cells_rpcapi.CellsAPI()
 
     def _find_single_response(self, responses, match_cell_name=None):
         for (response, cell_name) in responses:
@@ -216,7 +217,7 @@ class CellsServicesController(object):
 
     def _get_all_services(self, context):
         """Get services locally, or from cells."""
-        responses = cells_api.cell_broadcast_call(context,
+        responses = self.cells_rpcapi.cell_broadcast_call(context,
                                                   "down",
                                                   "list_services")
         for (response, cell_name) in responses:
@@ -226,7 +227,7 @@ class CellsServicesController(object):
 
     def _get_service_and_cell(self, context, service_id):
         """Get service locally, or from child cell."""
-        responses = cells_api.cell_broadcast_call(context, "down",
+        responses = self.cells_rpcapi.cell_broadcast_call(context, "down",
                 "get_service", service_id=service_id)
         for (response, cell_name) in responses:
             if response:
@@ -238,7 +239,7 @@ class CellsServicesController(object):
             cell_name, service_id = service_id.split("-")
         except (ValueError, AttributeError):
             raise webob.exc.HTTPNotFound()
-        responses = cells_api.cell_broadcast_call(context, "down",
+        responses = self.cells_rpcapi.cell_broadcast_call(context, "down",
                 "get_service", service_id=service_id)
         return self._find_single_response(responses, match_cell_name=cell_name)
 
@@ -248,7 +249,7 @@ class CellsServicesController(object):
             cell_name, compute_id = compute_id.split("-")
         except (ValueError, AttributeError):
             raise webob.exc.HTTPNotFound()
-        responses = cells_api.cell_broadcast_call(context, "down",
+        responses = self.cells_rpcapi.cell_broadcast_call(context, "down",
                 "compute_node_get", compute_node_id=compute_id)
         return self._find_single_response(responses, match_cell_name=cell_name)
 

@@ -43,7 +43,7 @@ these objects be simple dictionaries.
 
 """
 
-from nova.cells import api as cells_api
+from nova.cells import rpcapi as cells_rpcapi
 from nova import config
 from nova import exception
 from nova import flags
@@ -564,7 +564,7 @@ def instance_destroy(context, instance_uuid, constraint=None,
     rv = IMPL.instance_destroy(context, instance_uuid, constraint)
     if update_cells:
         try:
-            cells_api.instance_destroy(context, rv)
+            cells_rpcapi.CellsAPI().instance_destroy(context, rv)
         except Exception:
             LOG.exception(_("Failed to notify cells of instance destroy"))
     return rv
@@ -673,7 +673,7 @@ def instance_update(context, instance_uuid, values, update_cells=True):
     rv = IMPL.instance_update(context, instance_uuid, values)
     if update_cells:
         try:
-            cells_api.instance_update(context, rv)
+            cells_rpcapi.CellsAPI().instance_update(context, rv)
         except Exception:
             LOG.exception(_("Failed to notify cells of instance update"))
     return rv
@@ -694,7 +694,7 @@ def instance_update_and_get_original(context, instance_uuid, values):
     """
     rv = IMPL.instance_update_and_get_original(context, instance_uuid, values)
     try:
-        cells_api.instance_update(context, rv[1])
+        cells_rpcapi.CellsAPI().instance_update(context, rv[1])
     except Exception:
         LOG.exception(_("Failed to notify cells of instance update"))
     return rv
@@ -1125,7 +1125,8 @@ def block_device_mapping_create(context, values, update_cells=True):
     rv = IMPL.block_device_mapping_create(context, values)
     if update_cells:
         try:
-            cells_api.block_device_mapping_create(context, values)
+            cells_rpcapi.CellsAPI().block_device_mapping_create(context,
+                    values)
         except Exception:
             LOG.exception(_("Failed to notify cells of BDM create"))
     return rv
@@ -1136,7 +1137,8 @@ def block_device_mapping_update(context, bdm_id, values, update_cells=True):
     rv = IMPL.block_device_mapping_update(context, bdm_id, values)
     if update_cells:
         try:
-            cells_api.block_device_mapping_update(context, bdm_id, values)
+            cells_rpcapi.CellsAPI().block_device_mapping_update(context,
+                    bdm_id, values)
         except Exception:
             LOG.exception(_("Failed to notify cells of BDM update"))
     return rv
@@ -1148,7 +1150,8 @@ def block_device_mapping_update_or_create(context, values, update_cells=True):
     rv = IMPL.block_device_mapping_update_or_create(context, values)
     if update_cells:
         try:
-            cells_api.block_device_mapping_update_or_create(context, values)
+            cells_rpcapi.CellsAPI().block_device_mapping_update_or_create(
+                    context, values)
         except Exception:
             LOG.exception(_("Failed to notify cells of BDM update or create"))
     return rv
@@ -1179,7 +1182,7 @@ def block_device_mapping_destroy_by_instance_and_volume(context,
         context, instance_uuid, volume_id)
     if update_cells:
         try:
-            cells_api.block_device_mapping_destroy(context,
+            cells_rpcapi.CellsAPI().block_device_mapping_destroy(context,
                     instance_uuid, volume_id)
         except Exception:
             LOG.exception(_("Failed to notify cells of BDM destroy"))
@@ -1463,8 +1466,8 @@ def instance_metadata_update(context, instance_uuid, metadata, delete,
                                              metadata, delete)
     if update_cells:
         try:
-            cells_api.instance_metadata_update(context, instance_uuid,
-                    metadata, delete)
+            cells_rpcapi.CellsAPI().instance_metadata_update(context,
+                    instance_uuid, metadata, delete)
         except Exception:
             LOG.exception(_("Failed to notify cells of instance_metadata "
                     "update"))
@@ -1537,7 +1540,7 @@ def bw_usage_update(context, uuid, mac, start_period, bw_in, bw_out,
             bw_out, last_ctr_in, last_ctr_out, last_refreshed=last_refreshed)
     if update_cells:
         try:
-            cells_api.bw_usage_update(context,
+            cells_rpcapi.CellsAPI().bw_usage_update(context,
                     uuid, mac, start_period, bw_in, bw_out,
                     last_ctr_in, last_ctr_out, last_refreshed)
         except Exception:
@@ -1665,7 +1668,7 @@ def instance_fault_create(context, values, update_cells=True):
     rv = IMPL.instance_fault_create(context, values)
     if update_cells:
         try:
-            cells_api.instance_fault_create(context, rv)
+            cells_rpcapi.CellsAPI().instance_fault_create(context, rv)
         except Exception:
             LOG.exception(_("Failed to notify cells of instance fault"))
     return rv

@@ -17,7 +17,7 @@
 
 import re
 
-from nova.cells import api as cells_api
+from nova.cells import rpcapi as cells_rpcapi
 from nova.compute import api as compute_api
 from nova.compute import instance_types
 from nova.compute import task_states
@@ -37,7 +37,7 @@ flag_opts = [
 
 FLAGS = flags.FLAGS
 FLAGS.register_opts(flag_opts)
-LOG = logging.getLogger('nova.compute.cells_api')
+LOG = logging.getLogger(__name__)
 
 
 check_instance_state = compute_api.check_instance_state
@@ -60,22 +60,26 @@ class ComputeRPCAPINoOp(object):
 
 
 class SchedulerRPCAPIRedirect(object):
+    def __init__(self, cells_rpcapi_obj):
+        self.cells_rpcapi = cells_rpcapi_obj
+
     def __getattr__(self, key):
         def _noop_rpc_wrapper(*args, **kwargs):
             return None
         return _noop_rpc_wrapper
 
     def run_instance(self, context, **kwargs):
-        cells_api.schedule_run_instance(context, **kwargs)
+        self.cells_rpcapi.schedule_run_instance(context, **kwargs)
 
 
 class ComputeCellsAPI(compute_api.API):
     def __init__(self, *args, **kwargs):
         super(ComputeCellsAPI, self).__init__(*args, **kwargs)
+        self.cells_rpcapi = cells_rpcapi.CellsAPI()
         # Avoid casts/calls directly to compute
         self.compute_rpcapi = ComputeRPCAPINoOp()
         # Redirect scheduler run_instance to cells.
-        self.scheduler_rpcapi = SchedulerRPCAPIRedirect()
+        self.scheduler_rpcapi = SchedulerRPCAPIRedirect(self.cells_rpcapi)
         cells_config_file = FLAGS.cells_config_file
         if cells_config_file:
             self._cells_config_file = FLAGS.find_file(cells_config_file)
@@ -124,8 +128,8 @@ class ComputeCellsAPI(compute_api.API):
         # since '!' has become the new cell name delimeter.  We can
         # remove this kludkge shortly.
         cell_name = cell_name.replace('.', '!')
-        cells_api.cast_service_api_method(context, cell_name, 'compute',
-                method, instance_uuid, *args, **kwargs)
+        self.cells_rpcapi.cast_service_api_method(context, cell_name,
+                'compute', method, instance_uuid, *args, **kwargs)
 
     def _call_to_cells(self, context, instance, method, *args, **kwargs):
         instance_uuid = instance['uuid']
@@ -136,7 +140,7 @@ class ComputeCellsAPI(compute_api.API):
         # since '!' has become the new cell name delimeter.  We can
         # remove this kludkge shortly.
         cell_name = cell_name.replace('.', '!')
-        return cells_api.call_service_api_method(context, cell_name,
+        return self.cells_rpcapi.call_service_api_method(context, cell_name,
                 'compute', method, instance_uuid, *args, **kwargs)
 
     def _check_requested_networks(self, context, requested_networks):
@@ -243,7 +247,7 @@ class ComputeCellsAPI(compute_api.API):
             # broadcast a message down to all cells and hope this ends
             # up resolving itself...  Worse case.. the instance will
             # show back up again here.
-            cells_api.broadcast_service_api_method(context, 'compute',
+            self.cells_rpcapi.broadcast_service_api_method(context, 'compute',
                     'delete', instance['uuid'])
 
     @validate_cell

@@ -19,8 +19,8 @@ Cells Scheduler
 import copy
 import time
 
-from nova.cells import api as cells_api
 from nova.cells import filters
+from nova.cells import rpcapi as cells_rpcapi
 from nova.cells import utils as cells_utils
 from nova.cells import weights
 from nova import compute
@@ -64,6 +64,7 @@ class CellsScheduler(base.Base):
     def __init__(self, manager):
         super(CellsScheduler, self).__init__()
         self.manager = manager
+        self.cells_rpcapi = cells_rpcapi.CellsAPI()
         self.compute_api = compute.API()
         self.filter_classes = filters.get_filter_classes(
                 FLAGS.cell_scheduler_filters)
@@ -187,7 +188,7 @@ class CellsScheduler(base.Base):
                 else:
                     # Forward request to cell
                     fwd_msg['method'] = 'schedule_run_instance'
-                    self.manager.send_raw_message_to_cell(context,
+                    self.manager.cells_rpcapi.send_message_to_cell(context,
                             cell, fwd_msg)
                 return
             except Exception:
@@ -235,7 +236,7 @@ class CellsScheduler(base.Base):
             LOG.exception(_("Error scheduling"),
                     instance_uuid=instance_uuid)
             if self.manager.get_parent_cells():
-                cells_api.instance_update(context,
+                self.cells_rpcapi.instance_update(context,
                         {'uuid': instance_uuid,
                          'vm_state': vm_states.ERROR})
             else:

@@ -143,10 +143,11 @@ def _cells_list_hosts(req, service=None):
         ]
     """
     context = req.environ['nova.context']
-    responses = cells_api.cell_broadcast_call(context,
-                                              "down",
-                                              "list_services",
-                                              disabled=False)
+    rpcapi = cells_rpcapi.CellsAPI()
+    responses = rpcapi.cell_broadcast_call(context,
+                                           "down",
+                                           "list_services",
+                                           disabled=False)
     result = []
     for (hosts, cell_name) in responses:
         result.extend([
