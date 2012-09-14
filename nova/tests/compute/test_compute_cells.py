@@ -22,6 +22,7 @@ Tests For Compute w/ Cells
 import functools
 
 from nova.compute import cells_api as compute_cells_api
+from nova import db
 from nova import flags
 from nova.openstack.common import jsonutils
 from nova.openstack.common import log as logging
@@ -39,6 +40,10 @@ def stub_call_to_cells(context, instance, method, *args, **kwargs):
     original_instance = kwargs.pop('original_instance', None)
     if original_instance:
         instance = original_instance
+        # Restore this in child cell DB
+        db.instance_update(context, instance['uuid'],
+                           dict(vm_state=instance['vm_state'],
+                                task_state=instance['task_state']))
     return fn(context, instance, *args, **kwargs)
 
 
@@ -47,6 +52,10 @@ def stub_cast_to_cells(context, instance, method, *args, **kwargs):
     original_instance = kwargs.pop('original_instance', None)
     if original_instance:
         instance = original_instance
+        # Restore this in child cell DB
+        db.instance_update(context, instance['uuid'],
+                           dict(vm_state=instance['vm_state'],
+                                task_state=instance['task_state']))
     fn(context, instance, *args, **kwargs)
 
 
@@ -152,6 +161,11 @@ class CellsComputeAPITestCase(test_compute.ComputeAPITestCase):
     def test_snapshot_minram_mindisk_no_image(self):
         return super(CellsComputeAPITestCase,
                      self).test_snapshot_minram_mindisk_no_image()
+
+    @wrap_create_instance
+    def test_snapshot_given_image_uuid(self):
+        return super(CellsComputeAPITestCase,
+                     self).test_snapshot_given_image_uuid()
 
     def test_instance_metadata(self):
         # Overriding this because the test doesn't work with how
