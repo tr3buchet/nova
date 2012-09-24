@@ -34,6 +34,7 @@ class LeastCostTestCase(test.TestCase):
     def setUp(self):
         super(LeastCostTestCase, self).setUp()
         self.flags(reserved_host_disk_mb=0, reserved_host_memory_mb=0)
+        self.flags(rax_scheduler_num_hosts_to_fuzz=0)
         self.host_manager = fakes.FakeHostManager()
 
     def _get_all_hosts(self):
@@ -67,6 +68,47 @@ class LeastCostTestCase(test.TestCase):
                 options)
         self.assertEqual(weighted_host.weight, 11536)
         self.assertEqual(weighted_host.host_state.host, 'host1')
+
+    def test_weighted_sum_happy_day_rax_fuzzing(self):
+        self.flags(rax_scheduler_num_hosts_to_fuzz=2)
+        fn_tuples = [(1.0, offset), (1.0, scale)]
+        hostinfo_list = list(self._get_all_hosts())
+
+        # host1: free_ram_mb=512
+        # host2: free_ram_mb=1024
+        # host3: free_ram_mb=3072
+        # host4: free_ram_mb=8192
+
+        # [offset, scale]=
+        # [10512, 11024, 13072, 18192]
+        # [1024,  2048, 6144, 16384]
+
+        # adjusted [ 1.0 * x + 1.0 * y] =
+        # [11536, 13072, 19216, 34576]
+
+        # so, host1 should win:
+        options = {}
+
+        hosts_picked = {}
+
+        def _compare(weighted_host):
+            hosts_picked.setdefault(weighted_host.host_state.host, 0)
+            hosts_picked[weighted_host.host_state.host] += 1
+            return ((weighted_host.weight == 11536 and
+                            weighted_host.host_state.host == 'host1') or
+                   (weighted_host.weight == 13072 and
+                            weighted_host.host_state.host == 'host2'))
+
+        # Run this a number of times and make sure we get a mix.  Highly
+        # unlikely we'll pick the same host 100 times with the fuzzing,
+        # so this test _should_ pass!
+        for i in xrange(100):
+            weighted_host = least_cost.weighted_sum(fn_tuples,
+                    hostinfo_list, options)
+            self.assertTrue(_compare(weighted_host))
+        self.assertEqual(len(hosts_picked), 2)
+        self.assertIn('host1', hosts_picked.keys())
+        self.assertIn('host2', hosts_picked.keys())
 
     def test_weighted_sum_single_function(self):
         fn_tuples = [(1.0, offset), ]
