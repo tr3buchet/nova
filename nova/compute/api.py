@@ -908,13 +908,24 @@ class API(base.Base):
                             host=src_host, cast=False,
                             reservations=downsize_reservations)
 
-            is_up = False
-            # NOTE(jogo): db allows for multiple compute services per host
-            try:
-                services = self.db.service_get_all_compute_by_host(
-                        context.elevated(), instance['host'])
-            except exception.ComputeHostNotFound:
-                services = []
+            bdms = self.db.block_device_mapping_get_all_by_instance(
+                context, instance["uuid"])
+            is_up = True
+            services = []
+            if (not CONF.enable_cells or
+                    (CONF.enable_cells and not instance['cell_name'])):
+                # If cells is disabled or we are actually in the cell that
+                # contains this instance. Otherwise, this will fail to find
+                # the compute host.
+                try:
+                    # NOTE(jogo): db allows for multiple compute services
+                    # per host
+                    services = self.db.service_get_all_compute_by_host(
+                            context.elevated(), instance['host'])
+                except exception.ComputeHostNotFound:
+                    services = []
+                is_up = False
+
             for service in services:
                 if utils.service_is_up(service):
                     is_up = True
