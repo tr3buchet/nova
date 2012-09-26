@@ -3318,9 +3318,12 @@ def migration_get(context, id, session=None):
 
 @require_admin_context
 def migration_get_by_instance_and_status(context, instance_uuid, status):
+    if not isinstance(status, (tuple, list, set)):
+        status = (status,)
+
     result = model_query(context, models.Migration, read_deleted="yes").\
                      filter_by(instance_uuid=instance_uuid).\
-                     filter_by(status=status).\
+                     filter(models.Migration.status.in_(status)).\
                      first()
 
     if not result:

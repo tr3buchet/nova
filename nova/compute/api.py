@@ -1548,26 +1548,49 @@ class API(base.Base):
 
     @wrap_check_policy
     @check_instance_lock
-    @check_instance_state(vm_state=[vm_states.RESIZED])
     def revert_resize(self, context, instance):
         """Reverts a resize, deleting the 'new' instance in the process."""
-        elevated = context.elevated()
-        migration_ref = self.db.migration_get_by_instance_and_status(elevated,
-                instance['uuid'], 'finished')
+        if instance['vm_state'] not in [vm_states.RESIZED, vm_states.ERROR]:
+            raise exception.InstanceInvalidState(
+                attr='vm_state',
+                instance_uuid=instance['uuid'],
+                state=instance['vm_state'],
+                method='revert_resize')
+
+        if (instance['vm_state'] == vm_states.RESIZED and
+            instance['task_state'] is not None) or \
+           (instance['vm_state'] == vm_states.ERROR and
+            instance['task_state'] not in [task_states.RESIZE_PREP,
+                                           task_states.RESIZE_MIGRATING,
+                                           task_states.RESIZE_MIGRATED,
+                                           task_states.RESIZE_FINISH]):
+            raise exception.InstanceInvalidState(
+                attr='task_state',
+                instance_uuid=instance['uuid'],
+                state=instance['task_state'],
+                method='revert_resize')
+
+        context = context.elevated()
+        migration_ref = self.db.migration_get_by_instance_and_status(context,
+                instance['uuid'], ['finished', 'error'])
 
         # reverse quota reservation for increased resource usage
         deltas = self._reverse_upsize_quota_delta(context, migration_ref)
         reservations = self._reserve_quota_delta(context, deltas)
 
-        instance = self.update(context, instance,
-                               task_state=task_states.RESIZE_REVERTING,
-                               expected_task_state=None)
+        if instance['vm_state'] == vm_states.ERROR:
+            instance = self.update(context, instance,
+                                   task_state=task_states.RESIZE_REVERTING)
+        else:
+            instance = self.update(context, instance,
+                                   task_state=task_states.RESIZE_REVERTING,
+                                   expected_task_state=None)
 
         self.compute_rpcapi.revert_resize(context,
                 instance=instance, migration=migration_ref,
                 host=migration_ref['dest_compute'], reservations=reservations)
 
-        self.db.migration_update(elevated, migration_ref['id'],
+        self.db.migration_update(context.elevated(), migration_ref['id'],
                                  {'status': 'reverted'})
 
     @wrap_check_policy
