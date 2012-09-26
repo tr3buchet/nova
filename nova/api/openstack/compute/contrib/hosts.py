@@ -22,11 +22,15 @@ from xml.parsers import expat
 from nova.api.openstack import extensions
 from nova.api.openstack import wsgi
 from nova.api.openstack import xmlutil
+from nova.cells import rpcapi as cells_rpcapi
 from nova.compute import api as compute_api
+from nova import config
 from nova import db
 from nova import exception
 from nova import flags
 from nova.openstack.common import log as logging
+
+CONF = config.CONF
 
 LOG = logging.getLogger(__name__)
 authorize = extensions.extension_authorizer('compute', 'hosts')
@@ -91,8 +95,20 @@ class HostDeserializer(wsgi.XMLDeserializer):
 
 
 def _list_hosts(req, service=None):
-    """Returns a summary list of hosts, optionally filtering
+    """Returns a summary list of enabled hosts, optionally filtering
     by service type.
+    """
+    if CONF.enable_cells:
+        return _cells_list_hosts(req, service)
+    else:
+        return _no_cells_list_hosts(req, service)
+
+
+def _no_cells_list_hosts(req, service=None):
+    """Returns a summary list of enabled hosts, optionally filtering
+    by service type.
+
+    This is the 'no-cells' version, that just directly queries the DB
     """
     context = req.environ['nova.context']
     services = db.service_get_all(context, False)
@@ -109,6 +125,38 @@ def _list_hosts(req, service=None):
         hosts = [host for host in hosts
                  if host["service"] == service]
     return hosts
+
+
+def _cells_list_hosts(req, service=None):
+    """Returns a summary list of enabled hosts, optionally filtering
+    by service type.
+
+    This is the 'cells' version, that just drills down to
+    the child cells to get all the results
+
+    :returns: A list of the format:
+        [{'host_name': 'some.host.name', 'service': 'cells'},
+         {'host_name': 'console1.host.com', 'service': 'consoleauth'},
+         {'host_name': 'network1.host.com', 'service': 'network'},
+         {'host_name': 'sched2.host.com', 'service': 'scheduler'},
+         ...
+        ]
+    """
+    context = req.environ['nova.context']
+    responses = cells_api.cell_broadcast_call(context,
+                                              "down",
+                                              "list_services",
+                                              disabled=False)
+    result = []
+    for (hosts, cell_name) in responses:
+        result.extend([
+            {'host_name': '%s-%s' % (cell_name, host['host']),
+             'service': host['topic']}
+            for host in hosts
+            if service is None or host['topic'] == service
+        ])
+
+    return result
 
 
 def check_host(fn):
@@ -132,6 +180,28 @@ class HostController(object):
 
     @wsgi.serializers(xml=HostIndexTemplate)
     def index(self, req):
+        """
+        :returns: A dict in the format:
+
+            {'hosts': [{'host_name': 'some.host.name',
+               'service': 'cells'},
+              {'host_name': 'some.other.host.name',
+               'service': 'cells'},
+              {'host_name': 'some.celly.host.name',
+               'service': 'cells'},
+              {'host_name': 'console1.host.com',
+               'service': 'consoleauth'},
+              {'host_name': 'network1.host.com',
+               'service': 'network'},
+              {'host_name': 'netwwork2.host.com',
+               'service': 'network'},
+              {'host_name': 'sched1.host.com',
+               'service': 'scheduler'},
+              {'host_name': 'sched2.host.com',
+               'service': 'scheduler'},
+              {'host_name': 'vol1.host.com',
+               'service': 'volume'}]}
+        """
         authorize(req.environ['nova.context'])
         return {'hosts': _list_hosts(req)}
 
