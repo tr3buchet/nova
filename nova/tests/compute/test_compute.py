@@ -4464,7 +4464,6 @@ class ComputeAPITestCase(BaseTestCase):
 
         _context = context.get_admin_context()
         instance = self._create_fake_instance({'metadata': {'key1': 'value1'}})
-        instance = dict(instance)
 
         metadata = self.compute_api.get_instance_metadata(_context, instance)
         self.assertEqual(metadata, {'key1': 'value1'})

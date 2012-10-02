@@ -2089,6 +2089,9 @@ class API(base.Base):
     def delete_instance_metadata(self, context, instance, key):
         """Delete the given metadata item from an instance."""
         self.db.instance_metadata_delete(context, instance['uuid'], key)
+        # HACK(johannes): Setting 'metadata' attribute to a dict on
+        # a sqlalchemy model object blows up
+        instance = dict(instance)
         instance['metadata'] = {}
         notifications.send_update(context, instance, instance)
         self.compute_rpcapi.change_instance_metadata(context,
@@ -2115,6 +2118,9 @@ class API(base.Base):
         self._check_metadata_properties_quota(context, _metadata)
         metadata = self.db.instance_metadata_update(context, instance['uuid'],
                                          _metadata, True)
+        # HACK(johannes): Setting 'metadata' attribute to a dict on
+        # a sqlalchemy model object blows up
+        instance = dict(instance)
         instance['metadata'] = metadata
         notifications.send_update(context, instance, instance)
         diff = utils.diff_dict(orig, _metadata)
