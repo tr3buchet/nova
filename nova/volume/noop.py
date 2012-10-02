@@ -1,5 +1,6 @@
 import nova.volume.cinder
 
+
 class NoopVolumeApi(nova.volume.cinder.API):
 
     def __init__(self, *args, **kwargs):

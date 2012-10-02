@@ -18,6 +18,7 @@ import mock
 import webob.exc
 
 from nova.api.openstack.compute.contrib import hosts as os_hosts
+from nova.cells import manager
 from nova.compute import power_state
 from nova.compute import vm_states
 from nova import context
@@ -397,13 +398,8 @@ class TestCellsListHosts(test.TestCase):
         bc_patch = mock.patch("nova.cells.rpcapi.CellsAPI.cell_broadcast_call")
         self.bc_mock = bc_patch.start()
 
-        # Mock/Patch db.instance_get_all_by_host
-        db_get_all_patch = mock.patch('nova.db.instance_get_all_by_host')
-        self.db_get_all_mock = db_get_all_patch.start()
-
         def _cleanup_func():
             bc_patch.stop()
-            db_get_all_patch.stop()
 
         self._stop_func = _cleanup_func
 
@@ -451,6 +447,19 @@ class TestCellsListHosts(test.TestCase):
             self.assertEqual(responseHost['host_name'],
                              'c0002-%s' % fakeHost['host'])
             self.assertEqual(responseHost['service'], fakeHost['topic'])
+
+    def testParamNamesPassedCorrectly(self):
+        """
+        Tests that the keyword arguments passed into the rpc system are valid
+        for the function being called
+        """
+        func = manager.CellsManager.list_services.__func__
+        args_available = set(func.func_code.co_varnames)
+        os_hosts._cells_list_hosts(self.fake_req, 'compute')
+        # Get the list of args that were actually passed
+        arg_dict = self.bc_mock.mock_calls[0][2]
+        args_passed = set(arg_dict.keys())
+        self.assert_(args_passed <= args_available)
 
     def testLowLevelFiltering(self):
         """
