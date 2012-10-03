@@ -44,7 +44,7 @@ class CellsAdminAPITestCase(test.TestCase):
 
         def _fake_compute_api_get(context, instance_id):
             return {'id': 1, 'uuid': instance_id, 'vm_state': vm_states.ACTIVE,
-                    'task_state': None}
+                    'task_state': None, 'cell_name': None}
 
         def _fake_instance_update_and_get_original(context, instance_uuid,
                                                    values):

@@ -179,7 +179,6 @@ class ComputeCellsAPI(compute_api.API):
         """
         return super(ComputeCellsAPI, self).create(*args, **kwargs)
 
-    @validate_cell
     def update_state(self, context, instance, new_state):
         """Updates the state of a compute instance.
         For example to 'active' or 'error'.
@@ -197,13 +196,19 @@ class ComputeCellsAPI(compute_api.API):
                     vm_state=new_state,
                     task_state=None)
 
-    @validate_cell
     def update(self, context, instance, pass_on_state_change=False, **kwargs):
         """
         Update an instance.
         :param pass_on_state_change: if true, the state change will be passed
                                      on to child cells
         """
+        cell_name = instance['cell_name']
+        if cell_name and self._cell_read_only(cell_name):
+            raise exception.InstanceInvalidState(
+                    attr="vm_state",
+                    instance_uuid=instance['uuid'],
+                    state="temporary_readonly",
+                    method='update')
         rv = super(ComputeCellsAPI, self).update(context,
                 instance, **kwargs)
         kwargs_copy = kwargs.copy()
