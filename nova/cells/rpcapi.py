@@ -198,6 +198,15 @@ class CellsAPI(nova.openstack.common.rpc.proxy.RpcProxy):
         self.call_dbapi_method(context,
                 'block_device_mapping_update_or_create', (bdm, ))
 
+    def block_device_mapping_destroy_by_device(self, context, instance_uuid,
+                                               device_name):
+        """Broadcast upwards that a volume was updated."""
+        if not FLAGS.enable_cells:
+            return
+        self.call_dbapi_method(context,
+                'block_device_mapping_destroy_by_instance_and_device',
+                (instance_uuid, device_name))
+
     def block_device_mapping_destroy(self, context, instance_uuid, volume_id):
         """Broadcast upwards that a volume was updated."""
         if not FLAGS.enable_cells:

@@ -1163,16 +1163,26 @@ def block_device_mapping_get_all_by_instance(context, instance_uuid):
                                                          instance_uuid)
 
 
+# TODO(clayg): this method is only used in tests near as I can tell, and it
+# scares me because I don't know if bmd_id will match between cells
 def block_device_mapping_destroy(context, bdm_id):
     """Destroy the block device mapping."""
     return IMPL.block_device_mapping_destroy(context, bdm_id)
 
 
 def block_device_mapping_destroy_by_instance_and_device(context, instance_uuid,
-                                                        device_name):
+                                                        device_name,
+                                                        update_cells=True):
     """Destroy the block device mapping."""
-    return IMPL.block_device_mapping_destroy_by_instance_and_device(
+    rv = IMPL.block_device_mapping_destroy_by_instance_and_device(
         context, instance_uuid, device_name)
+    if update_cells:
+        try:
+            cells_rpcapi.CellsAPI().block_device_mapping_destroy_by_device(
+                context, instance_uuid, device_name)
+        except Exception:
+            LOG.exception(_("Failed to notify cells of BDM destroy device"))
+    return rv
 
 
 def block_device_mapping_destroy_by_instance_and_volume(context,
@@ -1185,7 +1195,7 @@ def block_device_mapping_destroy_by_instance_and_volume(context,
             cells_rpcapi.CellsAPI().block_device_mapping_destroy(context,
                     instance_uuid, volume_id)
         except Exception:
-            LOG.exception(_("Failed to notify cells of BDM destroy"))
+            LOG.exception(_("Failed to notify cells of BDM destroy volume"))
     return rv
 
 
