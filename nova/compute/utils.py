@@ -129,7 +129,8 @@ def _get_unused_letters(used_letters):
 
 def notify_usage_exists(context, instance_ref, current_period=False,
                         ignore_missing_network_data=True,
-                        system_metadata=None, extra_usage_info=None):
+                        system_metadata=None, extra_usage_info=None,
+                        include_bandwidth=False):
     """Generates 'exists' notification for an instance for usage auditing
     purposes.
 
@@ -148,8 +149,11 @@ def notify_usage_exists(context, instance_ref, current_period=False,
 
     audit_start, audit_end = notifications.audit_period_bounds(current_period)
 
-    bw = notifications.bandwidth_usage(instance_ref, audit_start,
-            ignore_missing_network_data)
+    if include_bandwidth:
+        bw = notifications.bandwidth_usage(instance_ref, audit_start,
+                ignore_missing_network_data)
+    else:
+        bw = {}
 
     if system_metadata is None:
         try:
