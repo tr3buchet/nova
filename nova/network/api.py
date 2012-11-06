@@ -207,9 +207,9 @@ class API(base.Base):
     @refresh_cache
     def deallocate_interface_for_instance(self, context, instance,
                                           interface_id, **kwargs):
-        """Allocates all network structures for an instance.
+        """Removes an interface from an instance
 
-        :returns: network info as from get_instance_nw_info() below
+        :returns: network info regarding the removed VIF
         """
         args = kwargs
         args['instance_id'] = instance['id']

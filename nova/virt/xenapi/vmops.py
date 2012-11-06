@@ -1358,10 +1358,13 @@ class VMOps(object):
         vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
         return vm_utils.compile_diagnostics(vm_rec)
 
+    def _get_vifs_for_instance(self, vm_rec):
+        return [self._session.call_xenapi("VIF.get_record", vrec)
+                    for vrec in vm_rec['VIFs']]
+
     def _get_vif_device_map(self, vm_rec):
         vif_map = {}
-        for vif in [self._session.call_xenapi("VIF.get_record", vrec)
-                    for vrec in vm_rec['VIFs']]:
+        for vif in self._get_vifs_for_instance(vm_rec):
             vif_map[vif['device']] = vif['MAC']
         return vif_map
 
@@ -1478,6 +1481,16 @@ class VMOps(object):
 
         return info_dict
 
+    def _remove_vif_from_network_info(self, instance, vm_ref, mac):
+        location = ('vm-data/networking/%s' % mac.replace(':', ''))
+        self._remove_from_param_xenstore(vm_ref, location)
+        try:
+            self._delete_from_xenstore(instance, location,
+                                               vm_ref=vm_ref)
+        except KeyError:
+            # catch KeyError for domid if instance isn't running
+            pass
+
     def inject_network_info(self, instance, network_info, vm_ref=None):
         """
         Generate the network info and make calls to place it into the
@@ -1502,6 +1515,39 @@ class VMOps(object):
                 # catch KeyError for domid if instance isn't running
                 pass
 
+    def _get_highest_vif_device_id(self, vm_rec):
+        """Enumerates all the VIFs and gets the next highest device id."""
+        max_device = -1
+        for device, vif in self._get_vif_device_map(vm_rec).iteritems():
+            max_device = max(int(device), max_device)
+        return max_device + 1
+
+    def create_vif_for_instance(self, instance, vif_info, hotplug):
+        vm_ref = vm_utils.lookup(self._session, instance["name"])
+        vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
+        device = self._get_highest_vif_device_id(vm_rec)
+        vif_rec = self.vif_driver.plug(instance, vif_info,
+                                       vm_ref=vm_ref, device=device)
+        vif_ref = self._session.call_xenapi('VIF.create', vif_rec)
+        if hotplug:
+            self._session.call_xenapi('VIF.plug', vif_ref)
+        return vif_ref
+
+    def delete_vif_for_instance(self, instance, vif, hot_unplug):
+        vm_ref = vm_utils.lookup(self._session, instance["name"])
+        vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
+        for vif_rec in self._get_vifs_for_instance(vm_rec):
+            if vif_rec["MAC"] == vif["mac_address"]:
+                vif_ref = self._session.call_xenapi("VIF.get_by_uuid",
+                                                    vif_rec["uuid"])
+                if hot_unplug:
+                    self._session.call_xenapi("VIF.unplug", vif_ref)
+                self._session.call_xenapi("VIF.destroy", vif_ref)
+                self._remove_vif_from_network_info(instance, vm_ref,
+                                                   vif["mac_address"])
+                return
+        raise Exception(_("No VIF found for instance %s") % instance["uuid"])
+
     def _create_vifs(self, vm_ref, instance, network_info):
         """Creates vifs for an instance."""
 
@@ -1512,7 +1558,7 @@ class VMOps(object):
 
         for device, vif in enumerate(network_info):
             vif_rec = self.vif_driver.plug(instance, vif,
-                                           vm_ref=vm_ref, device=device)
+                                       vm_ref=vm_ref, device=device)
             network_ref = vif_rec['network']
             LOG.debug(_('Creating VIF for network %(network_ref)s'),
                       locals(), instance=instance)

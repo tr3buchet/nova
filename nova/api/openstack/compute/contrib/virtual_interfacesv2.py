@@ -37,17 +37,22 @@ vif_nsmap = {None: wsgi.XMLNS_V11}
 class VirtualInterfaceTemplate(xmlutil.TemplateBuilder):
     def construct(self):
         root = xmlutil.TemplateElement('virtual_interfaces')
-        elem = xmlutil.SubTemplateElement(root, 'virtual_interface',
+        vif_xml = xmlutil.SubTemplateElement(root, 'virtual_interface',
                                           selector='virtual_interfaces')
-        elem.set('id')
-        elem.set('mac_address')
+        addrs = xmlutil.SubTemplateElement(vif_xml, 'ip_address',
+                                              selector="ip_addresses")
+        vif_xml.set('id')
+        vif_xml.set('mac_address')
+        addrs.set('address')
+        addrs.set('network_id')
+        addrs.set('network_label')
         return xmlutil.MasterTemplate(root, 1, nsmap=vif_nsmap)
 
 
 def _translate_vif_summary_view(_context, vif):
     """Maps keys for VIF summary view."""
     d = {}
-    d['id'] = vif['uuid']
+    d['id'] = vif['id']
     d['mac_address'] = vif['address']
     d['ip_addresses'] = vif['ip_addresses']
     return d
@@ -95,8 +100,19 @@ class ServerVirtualInterfaceController(object):
             expl_str = _("Too many instances attached to private network %s")
             raise exc.HTTPBadRequest(explanation=expl_str % network_id)
 
-        self.compute_api.inject_network_info(context, instance)
-        self.compute_api.reset_network(context, instance)
+        #TODO(cerberus): move all these down so we aren't making 3 calls :-P
+        try:
+            self.compute_api.create_vifs_for_instance(context, instance,
+                                                      interfaces)
+        except Exception:
+            for iface in interfaces:
+                self.network_api.deallocate_interface_for_instance(
+                                                context,
+                                                instance,
+                                                iface["id"])
+            expl = "Could not attach instance to network"
+            raise exc.HTTPBadRequest(explanation=expl)
+
         return dict(virtual_interfaces=interfaces)
 
     @wsgi.serializers(xml=VirtualInterfaceTemplate)
@@ -104,14 +120,12 @@ class ServerVirtualInterfaceController(object):
         context = req.environ["nova.context"]
         authorize(context)
         instance = self.compute_api.get(context, server_id)
-        interfaces = self.network_api.deallocate_interface_for_instance(
+        interface = self.network_api.deallocate_interface_for_instance(
                                                 context,
                                                 instance,
                                                 id)
-
-        self.compute_api.inject_network_info(context, instance)
-        self.compute_api.reset_network(context, instance)
-        return dict(virtual_interfaces=interfaces)
+        self.compute_api.delete_vifs_for_instance(context, instance,
+                                                  [interface])
 
 
 class Virtual_interfacesv2(extensions.ExtensionDescriptor):

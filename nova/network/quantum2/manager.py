@@ -355,7 +355,7 @@ class QuantumManager(manager.SchedulerDependentManager):
             addrs = [{"network_id": _net_mapped(a["ip_block"]["network_id"]),
                       "network_label": a["ip_block"]["network_name"],
                       "address": a["address"]} for a in vif["ip_addresses"]]
-            v = dict(uuid=vif["id"],
+            v = dict(id=vif["id"],
                      address=vif["mac_address"],
                      ip_addresses=addrs)
             vif_list.append(v)
@@ -377,6 +377,7 @@ class QuantumManager(manager.SchedulerDependentManager):
         self.m_conn.deallocate_interface_for_instance(context.project_id,
                                                       instance_id,
                                                       interface_id)
+        return vif
 
     @uuidize
     def allocate_interface_for_instance(self, context, instance_id,

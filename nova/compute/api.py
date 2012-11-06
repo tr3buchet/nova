@@ -2039,6 +2039,22 @@ class API(base.Base):
 
     @wrap_check_policy
     @check_instance_lock
+    def create_vifs_for_instance(self, context, instance, vifs):
+        """Creates and hotplugs new VIFs for the instance."""
+        self.compute_rpcapi.create_vifs_for_instance(context,
+                                                     instance=instance,
+                                                     vifs=vifs)
+
+    @wrap_check_policy
+    @check_instance_lock
+    def delete_vifs_for_instance(self, context, instance, vifs):
+        """Hot unplugs and deletes VIFs from the instance."""
+        self.compute_rpcapi.delete_vifs_for_instance(context,
+                                                     instance=instance,
+                                                     vifs=vifs)
+
+    @wrap_check_policy
+    @check_instance_lock
     def attach_volume(self, context, instance, volume_id, device=None):
         """Attach an existing volume to an existing instance."""
         # NOTE(vish): Fail fast if the device is not going to pass. This

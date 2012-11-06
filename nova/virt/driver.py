@@ -640,6 +640,14 @@ class ComputeDriver(object):
         # TODO(Vek): Need to pass context in for access to auth_token
         raise NotImplementedError()
 
+    def create_vif_for_instance(self, instance, vif_info, hotplug=False):
+        """Creates a new VIF and hotplugs it into the instance"""
+        raise NotImplementedError()
+
+    def delete_vif_for_instance(self, instance, vif_uuid, hotunplug=False):
+        """Hot unplugs a VIF from and instance"""
+        raise NotImplementedError()
+
     def plug_vifs(self, instance, network_info):
         """Plug VIFs into networks."""
         # TODO(Vek): Need to pass context in for access to auth_token

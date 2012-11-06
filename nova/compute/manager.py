@@ -2190,6 +2190,22 @@ class ComputeManager(manager.SchedulerDependentManager):
         """Inject network info, but don't return the info."""
         self._inject_network_info(context, instance)
 
+    @wrap_instance_fault
+    def create_vifs_for_instance(self, context, instance, vifs):
+        """Creates and hotplugs new VIFs for an instance"""
+        for vif in vifs:
+            self.driver.create_vif_for_instance(instance, vif, hotplug=True)
+        self.inject_network_info(context, instance)
+        self.reset_network(context, instance)
+
+    @wrap_instance_fault
+    def delete_vifs_for_instance(self, context, instance, vifs):
+        """Hot unplugs and deletes VIFs from an instance"""
+        for vif in vifs:
+            self.driver.delete_vif_for_instance(instance, vif, hot_unplug=True)
+        self.inject_network_info(context, instance)
+        self.reset_network(context, instance)
+
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @wrap_instance_fault
     def get_console_output(self, context, instance, tail_length=None):

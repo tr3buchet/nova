@@ -304,6 +304,16 @@ class XenAPIDriver(driver.ComputeDriver):
         """inject network info for specified instance"""
         self._vmops.inject_network_info(instance, network_info)
 
+    def create_vif_for_instance(self, instance, vif_info, hotplug):
+        """Creates a new VIF and potentially hotplugs it
+        for specified instance"""
+        self._vmops.create_vif_for_instance(instance, vif_info, hotplug)
+
+    def delete_vif_for_instance(self, instance, vif, hot_unplug):
+        """Creates a new VIF and potentially hotplugs it
+        for specified instance"""
+        self._vmops.delete_vif_for_instance(instance, vif, hot_unplug)
+
     def plug_vifs(self, instance_ref, network_info):
         """Plug VIFs into networks."""
         self._vmops.plug_vifs(instance_ref, network_info)
