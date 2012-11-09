@@ -1022,28 +1022,40 @@ class API(base.Base):
         """Restore a previously deleted (but not reclaimed) instance."""
         # Reserve quotas
         instance_type = instance['instance_type']
-        num_instances, quota_reservations = self._check_num_instances_quota(
-                context, instance_type, 1, 1)
 
+        # Only apply quota changes once if called multiple times
+        quota_reservations = None
         try:
+            # FIXME: This should really have expected_task_state set to
+            # to None, but the cells test code calls this method twice
+            # and causes problems
+            old, instance = self._update(context, instance,
+                                         task_state=task_states.RESTORING,
+                                         #expected_task_state=None,
+                                         deleted_at=None)
+
+            if old['task_state'] != task_states.RESTORING:
+                num_instances, quota_reservations = \
+                        self._check_num_instances_quota(context,
+                                                        instance_type,
+                                                        1, 1)
+
             if instance['host']:
-                instance = self.update(context, instance,
-                            task_state=task_states.RESTORING,
-                            expected_task_state=None,
-                            deleted_at=None)
                 self.compute_rpcapi.restore_instance(context, instance)
             else:
                 self.update(context,
                             instance,
                             vm_state=vm_states.ACTIVE,
                             task_state=None,
-                            expected_task_state=None,
+                            expected_task_state=task_states.RESTORING,
                             deleted_at=None)
 
-            QUOTAS.commit(context, quota_reservations)
+            if quota_reservations:
+                QUOTAS.commit(context, quota_reservations)
         except Exception:
             with excutils.save_and_reraise_exception():
-                QUOTAS.rollback(context, quota_reservations)
+                if quota_reservations:
+                    QUOTAS.rollback(context, quota_reservations)
 
     @wrap_check_policy
     @check_instance_lock
