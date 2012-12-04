@@ -136,6 +136,26 @@ class MelangeConnection(object):
         res = json.loads(self.post(url, body))
         return res["interface"]
 
+    def allocate_ip_for_instance(self, tenant_id, instance_id, interface_id,
+                                 network_id):
+        """
+        Allocate an additional IP from network on interface
+        """
+        body = {'network': {'id': network_id,
+                            'tenant_id': tenant_id}}
+
+        url = 'ipam/instances/%s/interfaces/%s/ip_addresses' % (instance_id,
+                                                                interface_id)
+        res = json.loads(self.post(url, body))
+        return res['instance']['interfaces']
+
+    def deallocate_ip_for_instance(self, instance_id, interface_id, address):
+        """
+        Deallocate an IP from an interface
+        """
+        url = 'ipam/instances/%s/interfaces/%s/ip_addresses/%s'
+        self.delete(url % (instance_id, interface_id, address))
+
     def allocate_for_instance_networks(self, tenant_id, instance_id,
                                        networks):
         """

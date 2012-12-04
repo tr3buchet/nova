@@ -117,17 +117,30 @@ class QuantumClientConnection(object):
         self.client.attach_resource(net_id, port_id, attach_data,
                                     tenant=tenant_id)
 
+    def update_port(self, tenant_id, net_id, port_id, **kwargs):
+        """Updates a port with the specified kwargs."""
+        msg = _("Updating port |%s| on network "
+                "|%s| with |%s| for tenant id |%s|")
+        LOG.debug(msg, port_id, net_id, kwargs, tenant_id)
+        port_data = {'port': dict((k, v) for (k, v) in kwargs.iteritems())}
+        print "HERE!"
+
+        self.client.update_port(net_id, port_id, port_data)
+
     def update_rxtx_factor_on_port(self, tenant_id, net_id, port_id,
                                    rxtx_factor):
         """Updates the rxtx_factor on a Quantum port on the specified
            network.
         """
-        LOG.debug(_("Updating rxtx_factor to %(rxtx_factor)s on port "
-                    "%(port_id)s on net %(net_id)s for %(tenant_id)s"),
-                  locals())
-        port_data = {'port': {'rxtx_factor': rxtx_factor}}
+        self.update_port(tenant_id, net_id, port_id, rxtx_factor=rxtx_factor)
 
-        self.client.update_port(net_id, port_id, port_data)
+    def update_allowed_address_pairs_on_port(self, tenant_id, net_id, port_id,
+                                             allowed_address_pairs):
+        """Updates the allowed address pairs on a Quantum port on the specified
+           network.
+        """
+        self.update_port(tenant_id, net_id, port_id,
+                         allowed_address_pairs=allowed_address_pairs)
 
     def detach_and_delete_port(self, tenant_id, net_id, port_id):
         """Detach and delete the specified Quantum port."""

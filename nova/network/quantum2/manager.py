@@ -493,6 +493,111 @@ class QuantumManager(manager.SchedulerDependentManager):
         nw_info = self._vifs_to_model(vifs)
         return self._order_nw_info_by_label(nw_info)
 
+    def _update_port_allowed_address_pairs(self, tenant_id, instance_id,
+                                           interface_id, network_id):
+        """gets mac address and ips from melange for an interface,
+           gets port from quantum for that interface,
+           then updates the allowed address pairs in quantum to match what
+           is in melange
+
+           Takes no action if unnecessary by FLAGS or if vif cannot be found
+        """
+        if (FLAGS.quantum_use_port_security and
+            FLAGS.quantum_default_tenant_id == tenant_id):
+
+            # get the whole vif record
+            vif = self.m_conn.get_interface_for_device(instance_id,
+                                                       interface_id)
+            # make sure we got a result
+            vif = vif.get('interface')
+            if not vif:
+                LOG.exception(_('vif could not be found to generate allowed'
+                                'address pairs'))
+                return
+
+            # get the list of ips from the vif (should include/exclude a
+            # recently added/removed fixed ip)
+            # TODO(tr3buchet) make sure this isn't a race condition
+            ips = [ip['address'] for ip in vif.get('ip_addresses', [])]
+
+            # append link local to ips if flags are set
+            if FLAGS.quantum_port_security_include_link_local:
+                mac = netaddr.EUI(vif['mac_address'])
+                ips.append(str(mac.ipv6_link_local()))
+
+            # get a list of [{'mac_address': 'xx:xx..',
+            #                 'ip': 'xxx.xxx.xxx.xxx'}, ...]
+            # for each ip in the ip list
+            pairs = self._generate_address_pairs(vif, ips)
+
+            # get the port id from quantum
+            port_id = self.q_conn.get_port_by_attachment(tenant_id,
+                                                         network_id,
+                                                         interface_id)
+            # update the port
+            self.q_conn.update_allowed_address_pairs_on_port(tenant_id,
+                                            network_id, port_id, pairs)
+
+    def add_fixed_ip_to_instance(self, context, instance_id, host, network_id):
+        LOG.debug(_('adding fixed_ip to instance |%s| on  network |%s|'),
+                  instance_id, network_id)
+
+        # map the network id, and use default tenant if map took
+        requested_network_id = network_id
+        network_id = self._nw_map.get(network_id) or network_id
+        if requested_network_id != network_id:
+            # map took place meaning they requested a rax network
+            tenant_id = FLAGS.quantum_default_tenant_id
+        else:
+            tenant_id = context.project_id
+
+        # get the interface for this instance and network from melange
+        res = self.m_conn.get_interfaces(tenant_id=context.project_id,
+                                         network_id=network_id,
+                                         device_id=instance_id)
+        try:
+            interface_id = res['interfaces'][0]['id']
+        except (KeyError, IndexError):
+            LOG.exception(_('Interface not found, IP allocation failed'))
+            return
+
+        # allocate the ip in melange
+        self.m_conn.allocate_ip_for_instance(tenant_id, instance_id,
+                                             interface_id, network_id)
+
+        # update port address pairs (does nothing if unnecessary)
+        self._update_port_allowed_address_pairs(tenant_id, instance_id,
+                                                interface_id, network_id)
+
+    def remove_fixed_ip_from_instance(self, context, instance_id,
+                                             host, address):
+        tenant_id = context.project_id
+        LOG.debug(_('removing fixed_ip |%s| from instance |%s|'),
+                  address, instance_id)
+
+        # get the interface on the instance that has address
+        res = self.m_conn.get_allocated_networks(instance_id)
+        try:
+            interfaces = res['instance']['interfaces']
+            for interface in interfaces:
+                for ip_addr in interface['ip_addresses']:
+                    if ip_addr['address'] == address:
+                        interface_id = interface['id']
+                        print ip_addr
+                        network_id = ip_addr['ip_block']['network_id']
+        except KeyError:
+            LOG.exception(_('IP could not be found on any interface. '
+                            'IP Deallocation failed.'))
+            return
+
+        # deallocate the ip
+        self.m_conn.deallocate_ip_for_instance(instance_id, interface_id,
+                                               address)
+
+        # update port address pairs (does nothing if unnecessary)
+        self._update_port_allowed_address_pairs(tenant_id, instance_id,
+                                                interface_id, network_id)
+
     # NOTE(jkoelker) Only a single network is supported. Function is
     #                pluralized for da backwards compatability.
     # NOTE(jkoelker) Accept **kwargs, for the bass ackwards compat. Dont use
